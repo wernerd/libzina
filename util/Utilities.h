@@ -164,6 +164,13 @@ namespace zina {
          * @return URL-encoded string
          */
         static std::string urlEncode(std::string s);
+
+        // Small functions to dump binary data as readable hex values, debugging for hases, encrypted data, etc
+        static std::string hexdump(const char* title, const unsigned char *s, size_t l);
+
+        static std::string hexdump(const std::string& title, const std::string& in) {
+                return hexdump(title.c_str(), (uint8_t*)in.data(), in.size());
+        }
     };
 }
 

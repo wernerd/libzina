@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-avoid-goto"
 /*
 Copyright 2016 Silent Circle, LLC
 
@@ -81,11 +83,12 @@ static const char* hasStagedMkSql =
  * SQL statements to process the Pre-key table.
  */
 static const char* dropPreKeys = "DROP TABLE PreKeys;";
-static const char* createPreKeys = "CREATE TABLE PreKeys (keyid INTEGER NOT NULL PRIMARY KEY, preKeyData BLOB, checkData BLOB);";
-static const char* insertPreKey = "INSERT INTO PreKeys (keyId, preKeyData) VALUES (?1, ?2);";
+static const char* createPreKeys = "CREATE TABLE PreKeys (keyid INTEGER NOT NULL PRIMARY KEY, preKeyData BLOB, checkData BLOB, signedKey BOOLEAN);";
+static const char* insertPreKey = "INSERT INTO PreKeys (keyId, preKeyData, signedKey) VALUES (?1, ?2, ?3);";
 static const char* selectPreKey = "SELECT preKeyData FROM PreKeys WHERE keyid=?1;";
 static const char* deletePreKey = "DELETE FROM PreKeys WHERE keyId=?1;";
-static const char* selectPreKeyAll = "SELECT keyId, preKeyData FROM PreKeys;";
+static const char* selectAllSignedPreKeys = "SELECT keyid, preKeyData FROM PreKeys WHERE signedKey=?1;";
+static const char* countPreKeys = "SELECT COUNT(*) FROM PreKeys WHERE signedKey=?1;";
 
 /* *****************************************************************************
  * SQL statements to process the message hash table.
@@ -120,32 +123,6 @@ static const char* selectMsgTraceMsgDevId =
 
 // See comment in deleteMsgTrace regarding the not fully qualified SQL statement to remove old trace records.
 static const char* removeMsgTrace = "DELETE FROM MsgTrace WHERE STRFTIME('%s', stored)";
-
-
-#ifdef UNITTESTS
-// Used in testing and debugging to do in-depth checks
-static void hexdump(const char* title, const unsigned char *s, size_t l) {
-    size_t n = 0;
-
-    if (s == nullptr) return;
-
-    fprintf(stderr, "%s",title);
-    for( ; n < l ; ++n)
-    {
-        if((n%16) == 0)
-            fprintf(stderr, "\n%04x", static_cast<int>(n));
-        fprintf(stderr, " %02x",s[n]);
-    }
-    fprintf(stderr, "\n");
-}
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
-static void hexdump(const char* title, const std::string& in)
-{
-    hexdump(title, (uint8_t*)in.data(), in.size());
-}
-#pragma clang diagnostic pop
-#endif
 
 using namespace zina;
 
@@ -600,6 +577,18 @@ int32_t SQLiteStoreConv::updateDb(int32_t oldVersion, int32_t newVersion) {
         oldVersion = 8;
     }
 
+    // Version 8 adds the conversation state column to the trace table
+    if (oldVersion == 8) {
+        SQLITE_PREPARE(db, "ALTER TABLE PreKeys ADD COLUMN convstate VARCHAR;", -1, &stmt, nullptr);
+        sqlCode_ = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        if (sqlCode_ != SQLITE_DONE) {
+            LOGGER(ERROR, __func__, ", SQL error adding convstate column: ", sqlCode_);
+            return sqlCode_;
+        }
+        oldVersion = 9;
+    }
+
     if (oldVersion != newVersion) {
         LOGGER(ERROR, __func__, ", Version numbers mismatch");
         return SQLITE_ERROR;
@@ -707,7 +696,7 @@ StringUnique SQLiteStoreConv::loadConversation(const string& name, const string&
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -728,7 +717,7 @@ StringUnique SQLiteStoreConv::loadConversation(const string& name, const string&
         // Get the session data
         LOGGER(DEBUGGING, __func__, " Conversation session found");
         len = sqlite3_column_bytes(stmt, 0);
-        data = StringUnique(new string((const char*)sqlite3_column_blob(stmt, 0), len));
+        data = StringUnique(new string((const char*)sqlite3_column_blob(stmt, 0), static_cast<size_t >(len)));
     }
 
 cleanup:
@@ -751,7 +740,7 @@ int32_t SQLiteStoreConv::storeConversation(const string& name, const string& lon
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -813,7 +802,7 @@ bool SQLiteStoreConv::hasConversation(const string& name, const string& longDevI
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -850,7 +839,7 @@ int32_t SQLiteStoreConv::deleteConversation(const string& name, const string& lo
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -910,7 +899,7 @@ int32_t SQLiteStoreConv::loadStagedMks(const string& name, const string& longDev
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -980,7 +969,7 @@ int32_t SQLiteStoreConv::insertStagedMk(const string& name, const string& longDe
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -1002,7 +991,7 @@ int32_t SQLiteStoreConv::insertStagedMk(const string& name, const string& longDe
     SQLITE_CHK(sqlite3_bind_text(stmt,  1, name.data(), static_cast<int32_t>(name.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_text(stmt,  2, devId, devIdLen, SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_text(stmt,  3, ownName.data(), static_cast<int32_t>(ownName.size()), SQLITE_STATIC));
-    SQLITE_CHK(sqlite3_bind_int64(stmt, 4, time(0)));
+    SQLITE_CHK(sqlite3_bind_int64(stmt, 4, time(nullptr)));
     SQLITE_CHK(sqlite3_bind_null(stmt,  5));
     SQLITE_CHK(sqlite3_bind_blob(stmt,  6, MKiv.data(), static_cast<int32_t>(MKiv.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_null(stmt,  7));
@@ -1026,7 +1015,7 @@ int32_t SQLiteStoreConv::deleteStagedMk(const string& name, const string& longDe
     int32_t devIdLen;
 
     LOGGER(DEBUGGING, __func__, " -->");
-    if (longDevId.size() > 0) {
+    if (!longDevId.empty()) {
         devId = longDevId.c_str();
         devIdLen = static_cast<int32_t>(longDevId.size());
     }
@@ -1082,8 +1071,6 @@ int32_t SQLiteStoreConv::loadPreKey(const int32_t preKeyId, string &preKeyData) 
     int32_t sqlResult;
 
     // selectPreKey = "SELECT preKeyData FROM PreKeys WHERE keyid=?1;";
-
-    // SELECT iv, preKeyData FROM PreKeys WHERE keyid=?1 ;
     LOGGER(DEBUGGING, __func__, " -->");
     SQLITE_CHK(SQLITE_PREPARE(db, selectPreKey, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int(stmt, 1, preKeyId));
@@ -1103,7 +1090,38 @@ cleanup:
     return sqlResult;
 }
 
-int32_t SQLiteStoreConv::storePreKey(int32_t preKeyId, const string& preKeyData)
+int32_t SQLiteStoreConv::loadPreKeysHelper(map<int32_t, string> &keys, bool isSigned) const {
+    sqlite3_stmt *stmt;
+    int32_t len;
+    int32_t sqlResult;
+
+    // selectAllSignedPreKeys = "SELECT keyid, preKeyData FROM PreKeys WHERE signedKey=?1;";
+
+    LOGGER(DEBUGGING, __func__, " -->");
+    SQLITE_CHK(SQLITE_PREPARE(db, selectAllSignedPreKeys, -1, &stmt, nullptr));
+    SQLITE_CHK(sqlite3_bind_int(stmt, 1, isSigned));
+
+    sqlResult= sqlite3_step(stmt);
+    ERRMSG;
+
+    while (sqlResult == SQLITE_ROW) {
+        int32_t keyId = sqlite3_column_int(stmt, 0);
+        len = sqlite3_column_bytes(stmt, 1);
+        if (len > 0) {
+            string preKey((const char *) sqlite3_column_blob(stmt, 1), static_cast<size_t>(len));
+            keys.insert(pair<int32_t, string>(keyId, preKey));
+        }
+        sqlResult = sqlite3_step(stmt);
+    }
+
+    cleanup:
+    sqlite3_finalize(stmt);
+    sqlCode_ = sqlResult;
+    LOGGER(DEBUGGING, __func__, " <-- ", sqlResult);
+    return sqlResult;
+}
+
+int32_t SQLiteStoreConv::storePreKey(int32_t preKeyId, const string& preKeyData, bool isSignedKey)
 {
     sqlite3_stmt *stmt;
     int32_t sqlResult;
@@ -1114,6 +1132,7 @@ int32_t SQLiteStoreConv::storePreKey(int32_t preKeyId, const string& preKeyData)
     SQLITE_CHK(SQLITE_PREPARE(db, insertPreKey, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int(stmt, 1, preKeyId));
     SQLITE_CHK(sqlite3_bind_blob(stmt, 2, preKeyData.data(), static_cast<int32_t>(preKeyData.size()), SQLITE_STATIC));
+    SQLITE_CHK(sqlite3_bind_int(stmt, 3, isSignedKey));
 
     sqlResult = sqlite3_step(stmt);
     if (sqlResult != SQLITE_DONE)
@@ -1173,6 +1192,34 @@ cleanup:
     return sqlResult;
 }
 
+int32_t SQLiteStoreConv::countUnsignedPreKeys(int32_t* sqlCode) const
+{
+    sqlite3_stmt *stmt;
+    int32_t sqlResult;
+    int32_t number = 0;
+
+    LOGGER(DEBUGGING, __func__, " -->");
+
+    // static const char* countPreKeys = "COUNT(*) FROM PreKeys WHERE signedKey=?1;";
+
+    SQLITE_CHK(SQLITE_PREPARE(db, countPreKeys, -1, &stmt, nullptr));
+    SQLITE_CHK(sqlite3_bind_int(stmt, 1, false));
+
+    sqlResult = sqlite3_step(stmt);
+    if (sqlResult != SQLITE_ROW) {
+        ERRMSG;
+    }
+    number = sqlite3_column_int(stmt, 0);
+
+    cleanup:
+    sqlite3_finalize(stmt);
+    if (sqlCode != nullptr)
+        *sqlCode = sqlResult;
+    sqlCode_ = sqlResult;
+    LOGGER(DEBUGGING, __func__, " <--", sqlResult);
+    return number;
+}
+
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
 void SQLiteStoreConv::dumpPreKeys() const
@@ -1181,7 +1228,7 @@ void SQLiteStoreConv::dumpPreKeys() const
     int32_t sqlResult;
 
     //  selectPreKeyAll = "SELECT keyId, preKeyData FROM PreKeys;";
-    SQLITE_CHK(SQLITE_PREPARE(db, selectPreKeyAll, -1, &stmt, nullptr));
+    SQLITE_CHK(SQLITE_PREPARE(db, selectAllSignedPreKeys, -1, &stmt, nullptr));
 
     while ((sqlResult = sqlite3_step(stmt)) == SQLITE_ROW) {
         sqlite3_column_int(stmt, 0);
@@ -1205,7 +1252,7 @@ int32_t SQLiteStoreConv::insertMsgHash(const string& msgHash)
     // char* insertMsgHashSql = "INSERT INTO MsgHash (msgHash, since) VALUES (?1, strftime('%s', ?2, 'unixepoch'));";
     SQLITE_CHK(SQLITE_PREPARE(db, insertMsgHashSql, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_blob(stmt,  1, msgHash.data(), static_cast<int32_t>(msgHash.size()), SQLITE_STATIC));
-    SQLITE_CHK(sqlite3_bind_int64(stmt, 2, time(0)));
+    SQLITE_CHK(sqlite3_bind_int64(stmt, 2, time(nullptr)));
 
     sqlResult = sqlite3_step(stmt);
     if (sqlResult != SQLITE_DONE)
@@ -1412,4 +1459,5 @@ cleanup:
     return sqlResult;
 }
 
+#pragma clang diagnostic pop
 #pragma clang diagnostic pop

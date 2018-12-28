@@ -210,3 +210,20 @@ string Utilities::urlEncode(string s)
     return string(v.cbegin(), v.cend());
 }
 
+string
+Utilities::hexdump(const char* title, const unsigned char *s, size_t l) {
+    char hexBuffer[2000] = {0};
+
+    if (s == nullptr) return string();
+
+    auto len = sprintf(hexBuffer, "%s",title);
+    for( size_t n = 0 ; n < l ; ++n)
+    {
+        if ((n%16) == 0) len += sprintf(hexBuffer+len, "\n%04x",static_cast<int>(n));
+
+        len += sprintf(hexBuffer+len, " %02x",s[n]);
+        if (len > 1960) break;
+    }
+    len += sprintf(hexBuffer+len, "\n");
+    return string(hexBuffer, len);
+}

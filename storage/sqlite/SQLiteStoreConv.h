@@ -29,6 +29,7 @@ limitations under the License.
 #include <list>
 #include <set>
 #include <vector>
+#include <map>
 
 #include "../../logging/ZinaLogging.h"
 #include "../../util/cJSON.h"
@@ -107,7 +108,7 @@ public:
     /**
      * @brief Close the ZINA store instance.
      */
-    static void closeStore() { delete instance_; instance_ = NULL;}
+    static void closeStore() { delete instance_; instance_ = nullptr;}
 
     /**
      * @brief Is store ready for use?
@@ -161,11 +162,11 @@ public:
      * 
      * Assemble a list of names for all known identities. 
      * 
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @return A new set with the names, an empty list if now identities available,
-     *         NULL in case of error
+     *         nullptr in case of error
      */
-    std::unique_ptr<std::set<std::string> > getKnownConversations(const std::string& ownName, int32_t* sqlCode = NULL);
+    std::unique_ptr<std::set<std::string> > getKnownConversations(const std::string& ownName, int32_t* sqlCode = nullptr);
 
     /**
      * @brief Get a list of long device ids for a name.
@@ -177,11 +178,11 @@ public:
      * @deprecated Use getLongDeviceIds(const std::string&, const std::string&, list<StringUnique> *) instead.
      * 
      * @param name the user's name.
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @return A new list with the long device ids, may be empty.
      */
     DEPRECATED_ZINA std::shared_ptr<std::list<std::string> >
-    getLongDeviceIds(const std::string& name, const std::string& ownName, int32_t* sqlCode = NULL);
+    getLongDeviceIds(const std::string& name, const std::string& ownName, int32_t* sqlCode = nullptr);
 
     /**
      * @brief Get a list of long device ids for a name.
@@ -197,11 +198,11 @@ public:
     int32_t getLongDeviceIds(const std::string& name, const std::string& ownName, std::list<StringUnique> &devIds);
 
     // ***** Conversation store
-    StringUnique loadConversation(const std::string& name, const std::string& longDevId, const std::string& ownName, int32_t* sqlCode = NULL) const;
+    StringUnique loadConversation(const std::string& name, const std::string& longDevId, const std::string& ownName, int32_t* sqlCode = nullptr) const;
 
     int32_t storeConversation(const std::string& name, const std::string& longDevId, const std::string& ownName, const std::string& data);
 
-    bool hasConversation(const std::string& name, const std::string& longDevId, const std::string& ownName, int32_t* sqlCode = NULL) const;
+    bool hasConversation(const std::string& name, const std::string& longDevId, const std::string& ownName, int32_t* sqlCode = nullptr) const;
 
     int32_t deleteConversation(const std::string& name, const std::string& longDevId, const std::string& ownName);
 
@@ -217,13 +218,25 @@ public:
     int32_t deleteStagedMk(time_t timestamp);
 
     // Pre key storage. The functions encrypt, decrypt and store/retrieve Pre-key JSON strings
-    int32_t loadPreKey(const int32_t preKeyId, std::string &key) const;
+    int32_t loadPreKey(int32_t preKeyId, std::string &key) const;
 
-    int32_t storePreKey(int32_t preKeyId, const std::string& preKeyData);
+    int32_t loadAllOneTimePreKeys(std::map<int32_t , std::string> &keys) const { return loadPreKeysHelper(keys, false); }
 
-    bool containsPreKey(int32_t preKeyId, int32_t* sqlCode = NULL) const;
+    int32_t loadAllSignedPreKeys(std::map<int32_t , std::string> &keys) const  { return loadPreKeysHelper(keys, true); }
+
+    int32_t storePreKey(int32_t preKeyId, const std::string& preKeyData, bool isSignedKey = false);
+
+    bool containsPreKey(int32_t preKeyId, int32_t* sqlCode = nullptr) const;
 
     int32_t removePreKey(int32_t preKeyId);
+
+    /**
+     * Count and return the number of unsigned prekeys in the database.
+     *
+     * @param sqlCode if not @c nullptr this contains the SQLite return code
+     * @return number of available non-signed prekeys
+     */
+    int32_t countUnsignedPreKeys(int32_t* sqlCode = nullptr) const;
 
     void dumpPreKeys() const;
 
@@ -400,7 +413,7 @@ public:
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @return @c true if the group exists, @c false otherwise
      */
-    bool hasGroup(const std::string& groupUuid, int32_t* sqlCode = NULL);
+    bool hasGroup(const std::string& groupUuid, int32_t* sqlCode = nullptr);
 
     /**
      * @brief List data of all known groups.
@@ -411,10 +424,10 @@ public:
      *
      * @deprecated Use listAllGroups(list<JsonUnique> *groups) instead.
      *
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c NULL
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
+     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
      */
-    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<cJSON> > >listAllGroups(int32_t* sqlCode = NULL);
+    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<cJSON> > >listAllGroups(int32_t* sqlCode = nullptr);
 
     /**
      * @brief List data of all known groups.
@@ -423,7 +436,7 @@ public:
      * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
      * to free the data structure.
      *
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @param groups pointer to list which get thew unique JSON data pointers
      * @return SQLite code
      */
@@ -436,7 +449,7 @@ public:
      * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
      * to free the data structure.
      *
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @param participantUuid Participant's uuid to use in query
      * @param groups pointer to list which get thew unique JSON data pointers
      * @return SQLite code
@@ -451,10 +464,10 @@ public:
      * the data structure.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
-     * @return cJSON shared pointer to group data structure, maybe @c NULL (false)
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
+     * @return cJSON shared pointer to group data structure, maybe @c nullptr (false)
      */
-    std::shared_ptr<cJSON> listGroup(const std::string& groupUuid, int32_t* sqlCode = NULL);
+    std::shared_ptr<cJSON> listGroup(const std::string& groupUuid, int32_t* sqlCode = nullptr);
 
     /**
      * @brief Set a new maximum number of group members
@@ -474,10 +487,10 @@ public:
      * The function reads and returns the group's attribute bits.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @return A pair containing the attribute bit and the time the group record was last modified
      */
-    std::pair<int32_t, time_t> getGroupAttribute(const std::string& groupUuid, int32_t* sqlCode = NULL) const;
+    std::pair<int32_t, time_t> getGroupAttribute(const std::string& groupUuid, int32_t* sqlCode = nullptr) const;
 
     /**
      * @brief Set/add the bits in the attribute mask to the group's attribute bits.
@@ -569,11 +582,11 @@ public:
      * @deprecated use getAllGroupMembers(const std::string &groupUuid, list<JsonUnique> *members) instead.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c NULL
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
+     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
      */
     DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<cJSON> > >
-    getAllGroupMembers(const std::string &groupUuid, int32_t *sqlCode = NULL);
+    getAllGroupMembers(const std::string &groupUuid, int32_t *sqlCode = nullptr);
 
     /**
      * @brief Get all members of a specified group.
@@ -606,10 +619,10 @@ public:
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param memberUuid the new member's UID
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c NULL
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
+     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
      */
-    std::shared_ptr<cJSON> getGroupMember(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = NULL);
+    std::shared_ptr<cJSON> getGroupMember(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = nullptr);
 
 
     /**
@@ -617,20 +630,20 @@ public:
     *
     * @param groupUuid The group's UUID (RFC4122 time based UUID)
     * @param memberUuid the new member's UID
-    * @param sqlCode If not @c NULL returns the SQLite return/error code
+    * @param sqlCode If not @c nullptr returns the SQLite return/error code
     * @return @c true if the group contains this member, @c false otherwise
     */
-    bool isMemberOfGroup(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = NULL);
+    bool isMemberOfGroup(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = nullptr);
 
     /**
     * @brief Check if this member of some group.
     *
     * @param groupUuid The group's UUID (RFC4122 time based UUID)
     * @param memberUuid the new member's UID
-    * @param sqlCode If not @c NULL returns the SQLite return/error code
+    * @param sqlCode If not @c nullptr returns the SQLite return/error code
     * @return @c true if the member is in some group, @c false otherwise
     */
-    bool isGroupMember(const std::string &memberUuid, int32_t *sqlCode = NULL);
+    bool isGroupMember(const std::string &memberUuid, int32_t *sqlCode = nullptr);
 
     /**
      * @brief Get the member's attribute bits.
@@ -639,10 +652,10 @@ public:
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param memberUuid the member's UID
-     * @param sqlCode If not @c NULL returns the SQLite return/error code
+     * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @return A pair containing the attribute bit and the time the member record was last modified
      */
-    std::pair<int32_t, time_t> getMemberAttribute(const std::string& groupUuid, const std::string& memberUuid, int32_t* sqlCode = NULL);
+    std::pair<int32_t, time_t> getMemberAttribute(const std::string& groupUuid, const std::string& memberUuid, int32_t* sqlCode = nullptr);
 
     /**
      * @brief Set/add the bits in the attribute mask to the member's attribute bits.
@@ -864,14 +877,13 @@ public:
 
     int32_t getExtendedErrorCode() const { return extendedErrorCode_; }
 
+    SQLiteStoreConv(const SQLiteStoreConv& other) = delete;
+    SQLiteStoreConv& operator=(const SQLiteStoreConv& other) = delete;
+    bool operator==(const SQLiteStoreConv& other) const = delete;
 
 private:
     SQLiteStoreConv();
     ~SQLiteStoreConv();
-
-    SQLiteStoreConv(const SQLiteStoreConv& other) = delete;
-    SQLiteStoreConv& operator=(const SQLiteStoreConv& other) = delete;
-    bool operator==(const SQLiteStoreConv& other) const = delete;
 
     /**
      * Create ZINA tables in database.
@@ -884,6 +896,8 @@ private:
     int32_t createGroupTables();
     int32_t createWaitForAckTables();
     int32_t createMessageQueuesTables();
+
+    int32_t loadPreKeysHelper(std::map<int32_t , std::string> &keys, bool isSigned) const;
 
     /**
      * @brief Update database version.
