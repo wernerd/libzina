@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include "../utilities.h"
-#include "../../util/cJSON.h"
 #include "../../util/b64helper.h"
 #include "../../util/Utilities.h"
 #include "scloud.h"
@@ -37,41 +36,40 @@ static const char* kHashStr         = "hash";
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
+
 
 SCLError scloudDeserializeKey(uint8_t *inData, size_t inLen, SCloudKey *keyOut)
 {
-    char* in = (char*)XMALLOC(inLen + 1);
-    memcpy(in, inData, inLen);
-    in[inLen] = '\0';
+    string in(reinterpret_cast<char*>(inData), inLen);
+    json j;
 
-    JsonUnique sharedRoot(cJSON_Parse(in));
-    cJSON* root = sharedRoot.get();
-
-    XFREE(in);
-
-    if (root == nullptr) {
+    try {
+        j = json::parse(in);
+    } catch(json::parse_error&) {
         return kSCLError_BadParams;
     }
 
-    int32_t version = Utilities::getJsonInt(root, kCurrentVersionStr, -1);
+    int32_t version = j.value(kCurrentVersionStr, -1);
+
     // If no current version then check version, backward compatibility.
     if (version == -1) {
-        version = Utilities::getJsonInt(root, kVersionStr, -1);
+        version = j.value(kVersionStr, -1);
     }
     if (version < kSCloudMinProtocolVersion) {
         return kSCLError_BadParams;
     }
     keyOut->keyVersion = version;
 
-    int32_t suite = Utilities::getJsonInt(root, kKeySuiteStr, -1);
+    int32_t suite = j.value(kKeySuiteStr, -1);
     keyOut->keySuite = (SCloudKeySuite)suite;
 
-    const char *const jsString = Utilities::getJsonString(root, kSymKeyStr, nullptr);
-    if (jsString == nullptr) {
+    const auto jsString = j.value(kSymKeyStr, "");
+    if (jsString.empty()) {
         return kSCLError_BadParams;
     }
 
-    size_t stringLen = strlen(jsString);
+    size_t stringLen = jsString.size();
     switch (keyOut->keySuite) {
         case kSCloudKeySuite_AES128:
             if(stringLen != (16 + 16) * 2) {   // 128 bit key, 16 bytes block size, as bin2hex
@@ -91,19 +89,19 @@ SCLError scloudDeserializeKey(uint8_t *inData, size_t inLen, SCloudKey *keyOut)
             return kSCLError_BadParams;
     }
 
-    uint8_t  *p;
+    const char  *p;
     size_t count;
-    for (count = 0, p = (uint8_t*)jsString; count < stringLen && p && *p; p += 2, count += 2) {
-            keyOut->symKey[(p - (uint8_t*)jsString) >> 1] = static_cast<uint8_t>(((HEXOF(*p)) << 4) + HEXOF(*(p+1)));
+    for (count = 0, p = jsString.data(); count < stringLen && p && *p; p += 2, count += 2) {
+            keyOut->symKey[(p - jsString.data()) >> 1] = static_cast<uint8_t>(((HEXOF(*p)) << 4) + HEXOF(*(p+1)));
     }
     if (version == 3) {
-        const char *const hash = Utilities::getJsonString(root, kHashStr, nullptr);
-        if (hash == nullptr)
+        const auto hash = j.value(kHashStr, "");
+        if (hash.empty())
             return kSCLError_BadParams;
 
-        size_t b64Length = strlen(hash);
+        size_t b64Length = hash.size();
         if (b64Length > 0)
-            b64Decode(hash, b64Length, keyOut->hash, SKEIN256_DIGEST_LENGTH);
+            b64Decode(hash.data(), b64Length, keyOut->hash, SKEIN256_DIGEST_LENGTH);
     }
     keyOut->symKeyLen = count >> 1;
     return (count == stringLen)? kSCLError_NoErr : kSCLError_BadParams;
@@ -111,36 +109,38 @@ SCLError scloudDeserializeKey(uint8_t *inData, size_t inLen, SCloudKey *keyOut)
 }
 
 
-static void createKeyJson(SCloudContextRef ctx, cJSON* root)
+static void createKeyJson(SCloudContextRef ctx, json& j)
 {
     char                tempBuf[1024];
     size_t              tempLen;
 
-    cJSON_AddNumberToObject(root, kVersionStr, kSCloudMinProtocolVersion);
-    cJSON_AddNumberToObject(root, kCurrentVersionStr, kSCloudCurrentProtocolVersion);
-    cJSON_AddNumberToObject(root, kKeySuiteStr, ctx->key.keySuite);
+    j[kVersionStr] = kSCloudMinProtocolVersion;
+    j[kCurrentVersionStr] = kSCloudCurrentProtocolVersion;
+    j[kKeySuiteStr] = ctx->key.keySuite;
 
     // Convert the symmetric key and the initial IV and store it
     bin2hex(ctx->key.symKey, ctx->key.symKeyLen + ctx->key.blockLength, tempBuf, &tempLen);
     tempBuf[tempLen] = '\0';
-    cJSON_AddStringToObject(root, kSymKeyStr, tempBuf);
+    j[kSymKeyStr] = tempBuf;
 
     b64Encode(ctx->key.hash, SKEIN256_DIGEST_LENGTH, tempBuf, SKEIN256_DIGEST_LENGTH*2);
-    cJSON_AddStringToObject(root, kHashStr, tempBuf);
+    j[kHashStr] = tempBuf;
 }
 
 SCLError SCloudEncryptGetKeyBLOB(SCloudContextRef ctx, uint8_t **outData, size_t *outSize)
 {
     SCLError            err = kSCLError_NoErr;
-    uint8_t             *outBuf = NULL;
+    uint8_t             *outBuf = nullptr;
 
-    JsonUnique jsonUnique(cJSON_CreateObject());
-    createKeyJson(ctx, jsonUnique.get());
+    json jsn;
 
-    outBuf = (uint8_t*)cJSON_PrintUnformatted(jsonUnique.get());
+    createKeyJson(ctx, jsn);
 
+    auto jsonString = jsn.dump();
+    outBuf = static_cast<uint8_t*>(malloc(jsonString.size() + 1));
+    memcpy(outBuf, jsonString.c_str(), jsonString.size() + 1);
     *outData = outBuf;
-    *outSize = strlen((const char*)outBuf);
+    *outSize = jsonString.size();
 
     return err;
 }
@@ -148,27 +148,26 @@ SCLError SCloudEncryptGetKeyBLOB(SCloudContextRef ctx, uint8_t **outData, size_t
 SCLError SCloudEncryptGetSegmentBLOB(SCloudContextRef ctx, int segNum, uint8_t **outData, size_t *outSize) {
 
     SCLError            err = kSCLError_NoErr;
-    uint8_t             *outBuf = NULL;
+    uint8_t             *outBuf = nullptr;
     char                tempBuf[1024];
     size_t              tempLen;
 
-    cJSON* array = cJSON_CreateArray();
-    cJSON_AddItemToArray(array, cJSON_CreateNumber(segNum));
+    json itemArray = json::array();
+    itemArray += segNum;
 
     URL64_encode(ctx->locator, TRUNCATED_LOCATOR_BITS >>3,  (uint8_t*)tempBuf, &tempLen);
     tempBuf[tempLen] = '\0';
-    cJSON_AddItemToArray(array, cJSON_CreateString(tempBuf));
+    itemArray += tempBuf;
 
-    cJSON* key = cJSON_CreateObject();
+    json key;
     createKeyJson(ctx, key);
+    itemArray += key;
 
-    cJSON_AddItemToArray(array, key);
-
-    outBuf = (uint8_t*)cJSON_PrintUnformatted(array);
-    cJSON_Delete(array);
-
+    auto jsonString = itemArray.dump();
+    outBuf = static_cast<uint8_t*>(XMALLOC(jsonString.size() + 1));
+    memcpy(outBuf, jsonString.c_str(), jsonString.size() + 1);
     *outData = outBuf;
-    *outSize = strlen((const char*)outBuf);
+    *outSize = jsonString.size();
 
     return err;
 }

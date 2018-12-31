@@ -30,29 +30,6 @@ static const uint8_t inData_1[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,1
 
 static const string metadata("This is metadata");  // This is 16 bytes, thus forces a full padding block
 
-
-#ifdef UNITTESTS
-// Used in testing and debugging to do in-depth checks
-static void hexdump(const char* title, const unsigned char *s, int l) {
-    int n=0;
-
-    if (s == NULL) return;
-
-    fprintf(stderr, "%s",title);
-    for( ; n < l ; ++n)
-    {
-        if((n%16) == 0)
-            fprintf(stderr, "\n%04x",n);
-        fprintf(stderr, " %02x",s[n]);
-    }
-    fprintf(stderr, "\n");
-}
-static void hexdump(const char* title, const std::string& in)
-{
-    hexdump(title, (uint8_t*)in.data(), in.size());
-}
-#endif
-
 class ScloudTestFixture: public ::testing::Test {
 public:
     ScloudTestFixture( ) {
@@ -84,12 +61,11 @@ TEST_F(ScloudTestFixture, SCloudBasic)
     uint8_t buffer[1024];
     size_t bufSize = 1024;
 
-    uint8_t* blob = NULL;
+    uint8_t* blob = nullptr;
     size_t blobSize = 0;
 
-
     err = SCloudEncryptNew((void*)inData_1, sizeof(inData_1), (void*)inData, sizeof(inData), (void*)metadata.data(), metadata.size(),
-                           NULL, NULL, &scCtxEnc );
+                           nullptr, nullptr, &scCtxEnc );
     ASSERT_EQ(kSCLError_NoErr, err);
 
     err = SCloudCalculateKey( scCtxEnc, 0);
@@ -113,7 +89,7 @@ TEST_F(ScloudTestFixture, SCloudBasic)
 
     err = SCloudEncryptGetKeyBLOB( scCtxEnc, &blob, &blobSize);
     ASSERT_EQ(kSCLError_NoErr, err);
-    ASSERT_FALSE(blob == NULL);
+    ASSERT_FALSE(blob == nullptr);
 
     string key((char*)blob, blobSize);
     free(blob);
@@ -121,26 +97,26 @@ TEST_F(ScloudTestFixture, SCloudBasic)
 
     err = SCloudEncryptGetSegmentBLOB( scCtxEnc, 1, &blob, &blobSize);
     ASSERT_EQ(kSCLError_NoErr, err);
-    ASSERT_FALSE(blob == NULL);
+    ASSERT_FALSE(blob == nullptr);
 
     string segment((char*)blob, blobSize);
     free(blob);
 //    cerr << "segment: " << segment << ", length: " << blobSize << endl;
 
-    err = SCloudDecryptNew((uint8_t*)key.data(), key.size(), NULL, NULL, &scCtxDec);
+    err = SCloudDecryptNew((uint8_t*)key.data(), key.size(), nullptr, nullptr, &scCtxDec);
     ASSERT_EQ(kSCLError_NoErr, err);
 
     SCloudDecryptNext(scCtxDec, buffer, bufSize);
 
-    uint8_t* dataBuffer = NULL;
-    uint8_t* metaBuffer = NULL;
+    uint8_t* dataBuffer = nullptr;
+    uint8_t* metaBuffer = nullptr;
 
     size_t dataLen;
     size_t metaLen;
 
     SCloudDecryptGetData(scCtxDec, &dataBuffer, &dataLen, &metaBuffer, &metaLen);
-    ASSERT_FALSE(dataBuffer == NULL);
-    ASSERT_FALSE(metaBuffer == NULL);
+    ASSERT_FALSE(dataBuffer == nullptr);
+    ASSERT_FALSE(metaBuffer == nullptr);
 
     string metaDecrypt((char*)metaBuffer, metaLen);
     ASSERT_EQ(metadata, metaDecrypt);
@@ -169,11 +145,11 @@ TEST_F(ScloudTestFixture, SCloudBigBuffer)
     size_t bufSize = 1024;
     uint8_t* bigBuffer;
 
-    uint8_t* blob = NULL;
+    uint8_t* blob = nullptr;
     size_t blobSize = 0;
 
     err = SCloudEncryptNew((void*)inData_1, sizeof(inData_1), (void*)bigData, 64*1024, (void*)metadataBig.data(), metadataBig.size(),
-                           NULL, NULL, &scCtxEnc );
+                           nullptr, nullptr, &scCtxEnc );
     ASSERT_EQ(kSCLError_NoErr, err);
 
     err = SCloudCalculateKey(scCtxEnc, 0);
@@ -204,26 +180,26 @@ TEST_F(ScloudTestFixture, SCloudBigBuffer)
 
     err = SCloudEncryptGetKeyBLOB( scCtxEnc, &blob, &blobSize);
     ASSERT_EQ(kSCLError_NoErr, err);
-    ASSERT_FALSE(blob == NULL);
+    ASSERT_FALSE(blob == nullptr);
 
     string key((char*)blob, blobSize);
     free(blob);
 
-    err = SCloudDecryptNew((uint8_t*)key.data(), key.size(), NULL, NULL, &scCtxDec);
+    err = SCloudDecryptNew((uint8_t*)key.data(), key.size(), nullptr, nullptr, &scCtxDec);
     ASSERT_EQ(kSCLError_NoErr, err);
 
     err = SCloudDecryptNext(scCtxDec, bigBuffer, actual);
     ASSERT_EQ(kSCLError_NoErr, err);
 
-    uint8_t* dataBuffer = NULL;
-    uint8_t* metaBuffer = NULL;
+    uint8_t* dataBuffer = nullptr;
+    uint8_t* metaBuffer = nullptr;
 
     size_t dataLen;
     size_t metaLen;
 
     SCloudDecryptGetData(scCtxDec, &dataBuffer, &dataLen, &metaBuffer, &metaLen);
-    ASSERT_FALSE(dataBuffer == NULL);
-    ASSERT_FALSE(metaBuffer == NULL);
+    ASSERT_FALSE(dataBuffer == nullptr);
+    ASSERT_FALSE(metaBuffer == nullptr);
 
     string metaDecrypt((char*)metaBuffer, metaLen);
     ASSERT_EQ(metadataBig, metaDecrypt);
