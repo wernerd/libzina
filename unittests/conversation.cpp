@@ -44,12 +44,11 @@ static const uint8_t keyInData[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,
  */
 class StoreTestFixture: public ::testing::Test {
 public:
-    StoreTestFixture( ) {
-        // initialization code here
-    }
+    // initialization code here
+    StoreTestFixture( ) = default;
 
     // code here will execute just before the test ensues
-    void SetUp() {
+    void SetUp() override {
         // capture the memory state at the beginning of the test
 #ifndef __APPLE__
         struct mallinfo minfo = mallinfo();
@@ -62,7 +61,7 @@ public:
         store->openStore(std::string());
     }
 
-    void TearDown( ) {
+    void TearDown( ) override {
         // code here will be called just after the test completes
         // ok to through exceptions from here if need be
         SQLiteStoreConv::closeStore();
@@ -93,14 +92,14 @@ public:
         }
     }
 
-    ~StoreTestFixture( )  {
+    ~StoreTestFixture( ) override {
         // cleanup any pending stuff, but no exceptions allowed
         LOGGER_INSTANCE setLogLevel(VERBOSE);
     }
 
     // put in any custom data members that you need
-    SQLiteStoreConv* store;
-    int beginMemoryState;
+    SQLiteStoreConv* store = nullptr;
+    int beginMemoryState = 0;
 };
 
 TEST_F(StoreTestFixture, BasicEmpty)
