@@ -217,22 +217,21 @@ bool AppInterfaceImpl::modifyGroupSize(const string& groupId, int32_t newSize)
         return false;
     }
     int32_t result;
-    shared_ptr<cJSON> group = store_->listGroup(groupId, &result);
+    JSONUnique group = store_->listGroup(groupId, &result);
     if (!group || SQL_FAIL(result)) {
         errorInfo_ = " Cannot get group data: ";
         errorInfo_.append(groupId);
         LOGGER(ERROR, __func__, errorInfo_);
         return false;
     }
-    cJSON* root = group.get();
-    string groupOwner(Utilities::getJsonString(root, GROUP_OWNER, ""));
+    string groupOwner = group->value(GROUP_OWNER, "");
 
     if (ownUser_ != groupOwner) {
         errorInfo_ = " Only owner can modify group member size";
         LOGGER(ERROR, __func__, errorInfo_);
         return false;
     }
-    int32_t members = Utilities::getJsonInt(root, GROUP_MEMBER_COUNT, -1);
+    int32_t members = group->value(GROUP_MEMBER_COUNT, -1);
     if (members == -1 || members > newSize) {
         errorInfo_ = " Already more members in group than requested.";
         LOGGER(ERROR, __func__, errorInfo_, members);
@@ -276,12 +275,12 @@ int32_t AppInterfaceImpl::sendGroupMessage(const string &messageDescriptor, cons
         return NO_SUCH_ACTIVE_GROUP;
     }
 
-    list<JsonUnique> members;
+    list<JSONUnique> members;
     result = store_->getAllGroupMembers(groupId, members);
     size_t membersFound = members.size();
     int32_t errorResult = OK;
     for (auto& member: members) {
-        string recipient(Utilities::getJsonString(member.get(), MEMBER_ID, ""));
+        string recipient = member->value(MEMBER_ID, "");
         bool toSibling = recipient == ownUser_;
         auto preparedMsgData = prepareMessageInternal(messageDescriptor, attachmentDescriptor, newAttributes,
                                                       toSibling, GROUP_MSG_NORMAL, &result, recipient, groupId);
@@ -1104,11 +1103,11 @@ int32_t AppInterfaceImpl::sendGroupMessageToSingleUserDeviceNoCS(const string &g
 void AppInterfaceImpl::clearGroupData()
 {
     LOGGER(DEBUGGING, __func__, " --> ");
-    list<JsonUnique> groups;
+    list<JSONUnique> groups;
     store_->listAllGroups(groups);
 
     for (auto& group : groups) {
-        string groupId(Utilities::getJsonString(group.get(), GROUP_ID, ""));
+        string groupId = group->value(GROUP_ID, "");
         store_->deleteAllMembers(groupId);
         store_->deleteGroup(groupId);
         store_->deleteVectorClocks(groupId);

@@ -1,5 +1,6 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "cppcoreguidelines-avoid-goto"
+// #pragma ide diagnostic ignored "ClangTidyInspection"
 /*
 Copyright 2016 Silent Circle, LLC
 
@@ -19,8 +20,6 @@ limitations under the License.
 #include "SQLiteStoreInternal.h"
 #include "../../util/Utilities.h"
 
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "ClangTidyInspection"
 using namespace std;
 
 static mutex sqlLock;
@@ -669,7 +668,7 @@ int32_t SQLiteStoreConv::getLongDeviceIds(const string& name, const string& ownN
 
     while ((sqlResult = sqlite3_step(stmt)) == SQLITE_ROW) {
         idLen = sqlite3_column_bytes(stmt, 0);
-        StringUnique id(new string((const char*)sqlite3_column_text(stmt, 0), static_cast<size_t>(idLen)));
+        auto id = make_unique<string>((const char*)sqlite3_column_text(stmt, 0), static_cast<size_t>(idLen));
         if (id->compare(0, id->size(), dummyId, id->size()) == 0 || id->find('_') != string::npos) {
             continue;
         }
@@ -717,7 +716,7 @@ StringUnique SQLiteStoreConv::loadConversation(const string& name, const string&
         // Get the session data
         LOGGER(DEBUGGING, __func__, " Conversation session found");
         len = sqlite3_column_bytes(stmt, 0);
-        data = StringUnique(new string((const char*)sqlite3_column_blob(stmt, 0), static_cast<size_t >(len)));
+        data = make_unique<string>((const char*)sqlite3_column_blob(stmt, 0), static_cast<size_t >(len));
     }
 
 cleanup:
@@ -1395,22 +1394,22 @@ int32_t SQLiteStoreConv::loadMsgTrace(const string &name, const string &messageI
     }
     while (sqlResult == SQLITE_ROW) {
         // Get trace fields and create a JSON formatted string
-        JsonUnique jsonUnique(cJSON_CreateObject());
-        cJSON* root = jsonUnique.get();
+        nlohmann::json jsn;
+
         // name is usually the SC UID string
-        cJSON_AddStringToObject(root, "name", (const char*)sqlite3_column_text(stmt, 0));
-        cJSON_AddStringToObject(root, "msgId", (const char*)sqlite3_column_text(stmt, 1));
-        cJSON_AddStringToObject(root, "devId", (const char*)sqlite3_column_text(stmt, 2));
-        cJSON_AddStringToObject(root, "state", (const char*)sqlite3_column_text(stmt, 3));
-        cJSON_AddStringToObject(root, "attr", (const char*)sqlite3_column_text(stmt, 4));
-        cJSON_AddStringToObject(root, "time", (const char*)sqlite3_column_text(stmt, 5));
+        jsn["name"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+        jsn["msgId"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+        jsn["devId"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+        jsn["state"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+        jsn["attr"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+        jsn["time"] = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
 
         int32_t flag = sqlite3_column_int(stmt, 6);
-        cJSON_AddNumberToObject(root, "received", ((flag & RECEIVED) == RECEIVED) ? 1 : 0);
-        cJSON_AddNumberToObject(root, "attachment", ((flag & ATTACHMENT) == ATTACHMENT) ? 1 : 0);
+        jsn["received"] = ((flag & RECEIVED) == RECEIVED) ? 1 : 0;
+        jsn["attachment"] = ((flag & ATTACHMENT) == ATTACHMENT) ? 1 : 0;
 
-        CharUnique out(cJSON_PrintUnformatted(root));
-        traceRecords.push_back(StringUnique(new string(out.get())));
+        auto str = make_unique<string>(jsn.dump());
+        traceRecords.push_back(move(str));
 
         sqlResult = sqlite3_step(stmt);
     }
@@ -1459,5 +1458,4 @@ cleanup:
     return sqlResult;
 }
 
-#pragma clang diagnostic pop
 #pragma clang diagnostic pop

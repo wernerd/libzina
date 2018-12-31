@@ -51,6 +51,7 @@ public:
                     std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > newOneTimePreKeys,
                     std::unique_ptr<PreKeyData> newSignedPreKey) override
     {
+        return GENERIC_ERROR;
     }
 
     KeyBundleUnique

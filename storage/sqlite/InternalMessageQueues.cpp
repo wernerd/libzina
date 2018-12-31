@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-avoid-goto"
 /*
 Copyright 2017 Silent Circle, LLC
 
@@ -54,12 +56,12 @@ static const char* cleanTempMsgSql = "DELETE FROM TempMsg WHERE inserted < ?1;";
 
 using namespace zina;
 
-static int64_t getSequenceNumber(sqlite3* db, string tableName)
+static int64_t getSequenceNumber(sqlite3* db, const string& tableName)
 {
     static const char* selectSeq = "select seq from sqlite_sequence where name=?1;";
     sqlite3_stmt *stmt;
 
-    sqlite3_prepare(db, selectSeq, -1, &stmt, NULL);
+    sqlite3_prepare(db, selectSeq, -1, &stmt, nullptr);
     sqlite3_bind_text(stmt, 1, tableName.data(), static_cast<int32_t>(tableName.size()), SQLITE_STATIC);
     sqlite3_step(stmt);
     int64_t sequence = sqlite3_column_int64(stmt, 0);
@@ -73,11 +75,11 @@ int32_t SQLiteStoreConv::createMessageQueuesTables()
     sqlite3_stmt* stmt;
     int32_t sqlResult;
 
-    SQLITE_PREPARE(db, dropReceivedRaw, -1, &stmt, NULL);
+    SQLITE_PREPARE(db, dropReceivedRaw, -1, &stmt, nullptr);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    SQLITE_CHK(SQLITE_PREPARE(db, createReceivedRaw, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, createReceivedRaw, -1, &stmt, nullptr));
     sqlResult = sqlite3_step(stmt);
     if (sqlResult != SQLITE_DONE) {
         ERRMSG;
@@ -85,11 +87,11 @@ int32_t SQLiteStoreConv::createMessageQueuesTables()
     }
     sqlite3_finalize(stmt);
 
-    SQLITE_PREPARE(db, dropTempMsg, -1, &stmt, NULL);
+    SQLITE_PREPARE(db, dropTempMsg, -1, &stmt, nullptr);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    SQLITE_CHK(SQLITE_PREPARE(db, createTempMsg, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, createTempMsg, -1, &stmt, nullptr));
     sqlResult = sqlite3_step(stmt);
     if (sqlResult != SQLITE_DONE) {
         ERRMSG;
@@ -116,7 +118,7 @@ int32_t SQLiteStoreConv::updateMessageQueues(int32_t oldVersion)
 
     LOGGER(DEBUGGING, __func__, " -->");
 
-    SQLITE_PREPARE(db, createReceivedRaw, -1, &stmt, NULL);
+    SQLITE_PREPARE(db, createReceivedRaw, -1, &stmt, nullptr);
     sqlCode_ = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     if (sqlCode_ != SQLITE_DONE) {
@@ -124,7 +126,7 @@ int32_t SQLiteStoreConv::updateMessageQueues(int32_t oldVersion)
         return sqlCode_;
     }
 
-    SQLITE_PREPARE(db, createTempMsg, -1, &stmt, NULL);
+    SQLITE_PREPARE(db, createTempMsg, -1, &stmt, nullptr);
     sqlCode_ = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     if (sqlCode_ != SQLITE_DONE) {
@@ -143,7 +145,7 @@ int32_t SQLiteStoreConv::insertReceivedRawData(const string& rawData, const stri
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* insertReceivedRawSql = "INSERT INTO receivedRaw (rawData, uid, displayName) VALUES (?1, ?2, ?3);";
-    SQLITE_CHK(SQLITE_PREPARE(db, insertReceivedRawSql, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, insertReceivedRawSql, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_blob(stmt, 1, rawData.data(), static_cast<int32_t>(rawData.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_text(stmt, 2, uid.data(), static_cast<int32_t>(uid.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_text(stmt, 3, displayName.data(), static_cast<int32_t>(displayName.size()), SQLITE_STATIC));
@@ -170,7 +172,7 @@ int32_t SQLiteStoreConv::loadReceivedRawData(list<unique_ptr<StoredMsgInfo> >* r
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* selectReceivedRaw = "SELECT sequence, rawData, uid, displayName FROM receivedRaw ORDER BY sequence ASC;";
-    SQLITE_CHK(SQLITE_PREPARE(db, selectReceivedRaw, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, selectReceivedRaw, -1, &stmt, nullptr));
 
     sqlResult= sqlite3_step(stmt);
     while (sqlResult == SQLITE_ROW) {
@@ -202,7 +204,7 @@ int32_t SQLiteStoreConv::deleteReceivedRawData(int64_t sequence)
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* removeReceivedRaw = "DELETE FROM receivedRaw WHERE sequence=?1;";
-    SQLITE_CHK(SQLITE_PREPARE(db, removeReceivedRaw, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, removeReceivedRaw, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int64(stmt, 1, sequence));
 
     sqlResult = sqlite3_step(stmt);
@@ -225,7 +227,7 @@ int32_t SQLiteStoreConv::cleanReceivedRawData(time_t timestamp)
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* cleanReceivedRaw = "DELETE FROM receivedRaw WHERE inserted < ?1;";
-    SQLITE_CHK(SQLITE_PREPARE(db, cleanReceivedRaw, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, cleanReceivedRaw, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int64(stmt, 1, timestamp));
 
     sqlResult = sqlite3_step(stmt);
@@ -252,7 +254,7 @@ int32_t SQLiteStoreConv::insertTempMsg(const string& messageData, const string& 
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* insertTempMsgSql = "INSERT INTO TempMsg (messageData, supplementData, msgType) VALUES (?1, ?2, ?3);";
-    SQLITE_CHK(SQLITE_PREPARE(db, insertTempMsgSql, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, insertTempMsgSql, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_text(stmt, 1, messageData.data(), static_cast<int32_t>(messageData.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_text(stmt, 2, supplementData.data(), static_cast<int32_t>(supplementData.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_int(stmt, 3, msgType));
@@ -278,7 +280,7 @@ int32_t SQLiteStoreConv::loadTempMsg(list<unique_ptr<StoredMsgInfo> >* tempMessa
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* selectTempMsg = "SELECT sequence, messageData, supplementData, msgType FROM TempMsg ORDER BY sequence ASC;";
-    SQLITE_CHK(SQLITE_PREPARE(db, selectTempMsg, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, selectTempMsg, -1, &stmt, nullptr));
 
     sqlResult= sqlite3_step(stmt);
     while (sqlResult == SQLITE_ROW) {
@@ -307,7 +309,7 @@ int32_t SQLiteStoreConv::deleteTempMsg(int64_t sequence)
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* removeTempMsg = "DELETE FROM TempMsg WHERE sequence=?1;";
-    SQLITE_CHK(SQLITE_PREPARE(db, removeTempMsg, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, removeTempMsg, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int64(stmt, 1, sequence));
 
     sqlResult = sqlite3_step(stmt);
@@ -330,7 +332,7 @@ int32_t SQLiteStoreConv::cleanTempMsg(time_t timestamp)
     LOGGER(DEBUGGING, __func__, " -->");
 
     // char* cleanTempMsgSql = "DELETE FROM TempMsg WHERE inserted < ?1;";
-    SQLITE_CHK(SQLITE_PREPARE(db, cleanTempMsgSql, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, cleanTempMsgSql, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_int64(stmt, 1, timestamp));
 
     sqlResult = sqlite3_step(stmt);
@@ -344,3 +346,5 @@ int32_t SQLiteStoreConv::cleanTempMsg(time_t timestamp)
     LOGGER(DEBUGGING, __func__, " <-- ", sqlResult);
     return sqlResult;
 }
+
+#pragma clang diagnostic pop

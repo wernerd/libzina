@@ -62,9 +62,8 @@ static string* preKeyJson(const DhKeyPair& preKeyPair)
 
 class StoreTestFixture: public ::testing::Test {
 public:
-    StoreTestFixture()  {
+    StoreTestFixture()  = default;
         // initialization code here
-    }
 
     void SetUp() override {
         // code here will execute just before the test ensues
@@ -368,7 +367,7 @@ TEST_F(StoreTestFixture, TempMsg)
     ASSERT_EQ(2, sequence);
 
     // Don't clean it yet
-    time_t nowMinus1 = time(NULL)-1;
+    time_t nowMinus1 = time(nullptr)-1;
     result = pks->cleanTempMsg(nowMinus1);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
 
@@ -378,7 +377,7 @@ TEST_F(StoreTestFixture, TempMsg)
     tempMsg.clear();
 
     sqlite3_sleep(2000);
-    nowMinus1 = time(NULL) - 1;
+    nowMinus1 = time(nullptr) - 1;
 
     // clear old records
     result = pks->cleanTempMsg(nowMinus1);
@@ -428,33 +427,32 @@ TEST_F(StoreTestFixture, GroupChatStore)
     sha256((uint8_t*)memberId_1.c_str(), static_cast<uint32_t >(memberId_1.length()), hash_1);
 
     uint8_t hash_2[SHA256_DIGEST_LENGTH];
-    sha256_ctx *ctx = reinterpret_cast<sha256_ctx*>(createSha256Context());
+    auto *ctx = reinterpret_cast<sha256_ctx*>(createSha256Context());
     sha256Ctx(ctx, (uint8_t*)memberId_1.c_str(), static_cast<uint32_t >(memberId_1.length()));
     sha256Ctx(ctx, (uint8_t*)memberId_2.c_str(), static_cast<uint32_t >(memberId_2.length()));
     closeSha256Context(ctx, hash_2);
 
     // Fresh DB, groups must be empty
-    list<JsonUnique> groups;
+    list<JSONUnique> groups;
     int32_t result = pks->listAllGroups(groups);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE(groups.empty());
 
-    shared_ptr<cJSON> group = pks->listGroup(groupId_1);
+    auto group = pks->listGroup(groupId_1);
     ASSERT_FALSE((bool)group);
 
     // Fresh DB, members must be empty
-    list<JsonUnique> members;
+    list<JSONUnique> members;
     result = pks->getAllGroupMembers(groupId_1, members);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE(members.empty());
 
-    shared_ptr<cJSON> member = pks->getGroupMember(groupId_1, memberId_1);
+    auto member = pks->getGroupMember(groupId_1, memberId_1);
     ASSERT_FALSE((bool)member);
 
     bool has = pks->hasGroup(groupId_1);
     ASSERT_FALSE(has);
 
-    // Test with empty group name and group decsription
     result = pks->insertGroup(groupId_1, Empty, groupOwner, Empty, 10);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
 
@@ -464,12 +462,11 @@ TEST_F(StoreTestFixture, GroupChatStore)
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    cJSON* root = group.get();
 
-    ASSERT_EQ(10, getJsonInt(root, GROUP_MAX_MEMBERS, -1));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
-    ASSERT_TRUE(Empty == string(getJsonString(root, GROUP_NAME, "no empty")));
-    ASSERT_TRUE(Empty == string(getJsonString(root, GROUP_DESC, "no empty")));
+    ASSERT_EQ(10, group->value(GROUP_MAX_MEMBERS, -1));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
+    ASSERT_TRUE(Empty == group->value(GROUP_NAME, "no empty"));
+    ASSERT_TRUE(Empty == group->value(GROUP_DESC, "no empty"));
 
     // Delete the group
     result = pks->deleteGroup(groupId_1);
@@ -502,53 +499,52 @@ TEST_F(StoreTestFixture, GroupChatStore)
     result = pks->listAllGroups(groups);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_EQ(1, groups.size());
-    root = groups.front().get();
-    ASSERT_EQ(10, getJsonInt(root, GROUP_MAX_MEMBERS, -1));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+    auto grp = move(groups.front());
+    ASSERT_EQ(10, grp->value(GROUP_MAX_MEMBERS, -1));
+    ASSERT_EQ(groupId_1, grp->value(GROUP_ID, ""));
 
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(10, getJsonInt(root, GROUP_MAX_MEMBERS, -1));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+    ASSERT_EQ(10, group->value(GROUP_MAX_MEMBERS, -1));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
 
     result = pks->modifyGroupMaxMembers(groupId_1, 30);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(30, getJsonInt(root, GROUP_MAX_MEMBERS, -1));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+
+    ASSERT_EQ(30, group->value(GROUP_MAX_MEMBERS, -1));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
 
     result = pks->setGroupName(groupId_1, rawData);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(rawData, getJsonString(root, GROUP_NAME, ""));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+
+    ASSERT_EQ(rawData, group->value(GROUP_NAME, ""));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
 
     result = pks->setGroupBurnTime(groupId_1, 4711, 1);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(4711, getJsonInt(root, GROUP_BURN_SEC, -1));
-    ASSERT_EQ(1, getJsonInt(root, GROUP_BURN_MODE, -1));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+
+    ASSERT_EQ(4711, group->value(GROUP_BURN_SEC, -1));
+    ASSERT_EQ(1, group->value(GROUP_BURN_MODE, -1));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
 
     result = pks->setGroupAvatarInfo(groupId_1, rawData);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(rawData, string(getJsonString(root, GROUP_AVATAR, "")));
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
+
+    ASSERT_EQ(rawData, group->value(GROUP_AVATAR, ""));
+    ASSERT_EQ(groupId_1, group->value(GROUP_ID, ""));
 
     // Add a ratchet conversation for the member, use some dummy data. Keys are
     // important here
@@ -588,17 +584,17 @@ TEST_F(StoreTestFixture, GroupChatStore)
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(1, getJsonInt(root, GROUP_MEMBER_COUNT, -1));
+
+    ASSERT_EQ(1, group->value(GROUP_MEMBER_COUNT, -1));
 
     // List all members of a group, should return a list with size 1 and the correct data
     members.clear();
     result = pks->getAllGroupMembers(groupId_1, members);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_EQ(1, members.size());
-    root = members.front().get();
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(memberId_1, string(getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId_1, member->value(GROUP_ID, ""));
+    ASSERT_EQ(memberId_1, member->value(MEMBER_ID, ""));
 
     // Add a second group member.
     result = pks->insertMember(groupId_1, memberId_2);
@@ -629,9 +625,9 @@ TEST_F(StoreTestFixture, GroupChatStore)
     member = pks->getGroupMember(groupId_1, memberId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = member.get();
-    ASSERT_EQ(groupId_1, string(getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(memberId_1, string(getJsonString(root, MEMBER_ID, "")));
+
+    ASSERT_EQ(groupId_1, member->value(GROUP_ID, ""));
+    ASSERT_EQ(memberId_1, member->value(MEMBER_ID, ""));
 
     // Try to delete the group with existing members, must fail with code 19 (SQLITE_CONSTRAINT)
     result = pks->deleteGroup(groupId_1);
@@ -672,8 +668,8 @@ TEST_F(StoreTestFixture, GroupChatStore)
     group = pks->listGroup(groupId_1, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
     ASSERT_TRUE((bool)group);
-    root = group.get();
-    ASSERT_EQ(0, getJsonInt(root, GROUP_MEMBER_COUNT, -1));
+
+    ASSERT_EQ(0, group->value(GROUP_MEMBER_COUNT, -1));
 
     // Delete the group, must succeed now
     result = pks->deleteGroup(groupId_1);

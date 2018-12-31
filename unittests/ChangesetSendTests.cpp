@@ -386,34 +386,34 @@ TEST_F(ChangeSetTestsFixtureMembers, CreateChangeSetTests) {
     ASSERT_TRUE(store->hasGroup(groupId, nullptr));
 
     int32_t result;
-    shared_ptr<cJSON> group = store->listGroup(groupId, &result);
+    auto group = store->listGroup(groupId, &result);
     ASSERT_FALSE(SQL_FAIL(result)) << store->getLastError();
     ASSERT_TRUE((bool)group);
 
-    cJSON *root = group.get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(avatar_1, string(Utilities::getJsonString(root, GROUP_AVATAR, "")));
-    ASSERT_EQ(500, Utilities::getJsonInt(root, GROUP_BURN_SEC, -1));
-    ASSERT_EQ(1, Utilities::getJsonInt(root, GROUP_BURN_MODE, -1));
+    ASSERT_EQ(groupId, group->value(GROUP_ID, ""));
+    ASSERT_EQ(avatar_1, group->value(GROUP_AVATAR, ""));
+    ASSERT_EQ(500, group->value(GROUP_BURN_SEC, -1));
+    ASSERT_EQ(1, group->value(GROUP_BURN_MODE, -1));
 
     // List all members of a group, should return a list with size 3 and the correct data
-    list<JsonUnique> members;
+    list<JSONUnique> members;
     result = store->getAllGroupMembers(groupId, members);
     ASSERT_FALSE(SQL_FAIL(result)) << store->getLastError();
     ASSERT_EQ(3, members.size());
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(ownName, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+
+    auto member = move(members.front());
+    ASSERT_EQ(groupId, member->value(GROUP_ID, ""));
+    ASSERT_EQ(ownName, member->value(MEMBER_ID, ""));
 
     members.pop_front();
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(memberId_1, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId, member->value(GROUP_ID, ""));
+    ASSERT_EQ(memberId_1, member->value(MEMBER_ID, ""));
 
     members.pop_front();
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(otherMemberId_1, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId, member->value( GROUP_ID, ""));
+    ASSERT_EQ(otherMemberId_1, member->value(MEMBER_ID, ""));
 
 
     // Now we have a prepare change set, tested, database looks good
@@ -528,19 +528,19 @@ TEST_F(ChangeSetTestsFixtureMembers, CreateChangeSetTests) {
     ASSERT_FALSE(SQL_FAIL(result)) << store->getLastError();
     ASSERT_EQ(3, members.size());
 
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(ownName, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId, member->value(GROUP_ID, ""));
+    ASSERT_EQ(ownName, member->value(MEMBER_ID, ""));
 
     members.pop_front();
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(memberId_1, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId, member->value(GROUP_ID, ""));
+    ASSERT_EQ(memberId_1, member->value(MEMBER_ID, ""));
 
     members.pop_front();
-    root = members.front().get();
-    ASSERT_EQ(groupId, string(Utilities::getJsonString(root, GROUP_ID, "")));
-    ASSERT_EQ(otherMemberId_2, string(Utilities::getJsonString(root, MEMBER_ID, "")));
+    member = move(members.front());
+    ASSERT_EQ(groupId, member->value(GROUP_ID, ""));
+    ASSERT_EQ(otherMemberId_2, member->value(MEMBER_ID, ""));
 
     appInterface_1->createChangeSetDevice(groupId, longDevId_2, attributes, &newAttributes);
     ASSERT_FALSE(newAttributes.empty());

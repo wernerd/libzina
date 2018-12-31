@@ -32,11 +32,8 @@ string updateId_2("update_id_2");
 
 class VectorClocksTestsFixture: public ::testing::Test {
 public:
-    VectorClocksTestsFixture( ) {
-        // initialization code here
-    }
-
-    void SetUp() {
+    VectorClocksTestsFixture( ) =default;
+    void SetUp() override {
         // code here will execute just before the test ensues
         LOGGER_INSTANCE setLogLevel(ERROR);
         pks = SQLiteStoreConv::getStore();
@@ -44,13 +41,13 @@ public:
         pks->openStore(std::string());
     }
 
-    void TearDown() {
+    void TearDown() override {
         // code here will be called just after the test completes
         // ok to through exceptions from here if need be
         SQLiteStoreConv::closeStore();
     }
 
-    ~VectorClocksTestsFixture()  {
+    ~VectorClocksTestsFixture() override {
         // cleanup any pending stuff, but no exceptions allowed
         LOGGER_INSTANCE setLogLevel(VERBOSE);
     }

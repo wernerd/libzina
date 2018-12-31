@@ -422,25 +422,11 @@ public:
      * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
      * to free the data structure.
      *
-     * @deprecated Use listAllGroups(list<JsonUnique> *groups) instead.
-     *
-     * @param sqlCode If not @c nullptr returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
-     */
-    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<cJSON> > >listAllGroups(int32_t* sqlCode = nullptr);
-
-    /**
-     * @brief List data of all known groups.
-     *
-     * Creates and returns a list of shared pointers to cJSON data structures that contain
-     * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
-     * to free the data structure.
-     *
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @param groups pointer to list which get thew unique JSON data pointers
      * @return SQLite code
      */
-    int32_t listAllGroups(std::list<JsonUnique> &groups);
+    int32_t listAllGroups(std::list<JSONUnique> &groups);
 
     /**
      * @brief List data of all known groups which have a certain user as participant.
@@ -454,7 +440,7 @@ public:
      * @param groups pointer to list which get thew unique JSON data pointers
      * @return SQLite code
      */
-    int32_t listAllGroupsWithMember(const std::string& participantUuid, std::list<JsonUnique> &groups);
+    int32_t listAllGroupsWithMember(const std::string& participantUuid, std::list<JSONUnique> &groups);
 
     /**
      * @brief Get data of a group.
@@ -465,9 +451,9 @@ public:
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
-     * @return cJSON shared pointer to group data structure, maybe @c nullptr (false)
+     * @return pointer to group data structure, maybe @c nullptr (false)
      */
-    std::shared_ptr<cJSON> listGroup(const std::string& groupUuid, int32_t* sqlCode = nullptr);
+    JSONUnique listGroup(const std::string& groupUuid, int32_t* sqlCode = nullptr);
 
     /**
      * @brief Set a new maximum number of group members
@@ -575,22 +561,6 @@ public:
     /**
      * @brief Get all members of a specified group.
      *
-     * Creates and returns a list of shared pointers to cJSON data structures that contain the group's
-     * members data. The shared pointers have a special deleter that calls @c cJSON_delete
-     * to free the data structure.
-     *
-     * @deprecated use getAllGroupMembers(const std::string &groupUuid, list<JsonUnique> *members) instead.
-     *
-     * @param groupUuid The group's UUID (RFC4122 time based UUID)
-     * @param sqlCode If not @c nullptr returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
-     */
-    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<cJSON> > >
-    getAllGroupMembers(const std::string &groupUuid, int32_t *sqlCode = nullptr);
-
-    /**
-     * @brief Get all members of a specified group.
-     *
      * Creates and returns a list of unique pointers to cJSON data structures that contain the group's
      * members data. The unique pointers have a special deleter that calls @c cJSON_delete
      * to free the data structure.
@@ -599,7 +569,7 @@ public:
      * @param members pointer to a list of unique pointer to JSON
      * @return SQLite code
      */
-    int32_t getAllGroupMembers(const std::string &groupUuid, std::list<JsonUnique> &members);
+    int32_t getAllGroupMembers(const std::string &groupUuid, std::list<JSONUnique> &members);
 
     /**
      * @brief Get all member uuids for a specified group.
@@ -622,7 +592,7 @@ public:
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
      */
-    std::shared_ptr<cJSON> getGroupMember(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = nullptr);
+    JSONUnique getGroupMember(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = nullptr);
 
 
     /**

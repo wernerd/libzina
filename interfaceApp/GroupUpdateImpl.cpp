@@ -440,11 +440,10 @@ static int32_t serializeChangeSet(PtrChangeSet& changeSet, cJSON *root, string *
 static int32_t addMissingMetaData(PtrChangeSet changeSet, const string& groupId, const string& binDeviceId, const uint8_t *updateId, SQLiteStoreConv &store)
 {
     int32_t result;
-    auto groupShared = store.listGroup(groupId, &result);
-    auto group = groupShared.get();
+    auto group = store.listGroup(groupId, &result);
 
     if (!changeSet->has_updatename()) {
-        string name = Utilities::getJsonString(group, GROUP_NAME, "");
+        string name = group->value(GROUP_NAME, "");
         changeSet->mutable_updatename()->set_name(name);
         result = prepareChangeSetClocks(groupId, binDeviceId, changeSet, GROUP_SET_NAME, updateId, store, false);
         if (result < 0) {
@@ -453,7 +452,7 @@ static int32_t addMissingMetaData(PtrChangeSet changeSet, const string& groupId,
     }
 
     if (!changeSet->has_updateavatar()) {
-        string avatar = Utilities::getJsonString(group, GROUP_AVATAR, "");
+        string avatar = group->value(GROUP_AVATAR, "");
         changeSet->mutable_updateavatar()->set_avatar(avatar);
         result = prepareChangeSetClocks(groupId, binDeviceId, changeSet, GROUP_SET_AVATAR, updateId, store, false);
         if (result < 0) {
@@ -461,8 +460,8 @@ static int32_t addMissingMetaData(PtrChangeSet changeSet, const string& groupId,
         }
     }
     if (!changeSet->has_updateburn()) {
-        auto sec = static_cast<uint64_t>(Utilities::getJsonInt(group, GROUP_BURN_SEC, 0));
-        int32_t mode = Utilities::getJsonInt(group, GROUP_BURN_MODE, 0);
+        uint64_t sec = group->value(GROUP_BURN_SEC, 0);
+        int32_t mode = group->value(GROUP_BURN_MODE, 0);
         changeSet->mutable_updateburn()->set_burn_ttl_sec(sec);
         changeSet->mutable_updateburn()->set_burn_mode((GroupUpdateSetBurn_BurnMode)mode);
         result = prepareChangeSetClocks(groupId, binDeviceId, changeSet, GROUP_SET_BURN, updateId, store, false);
@@ -475,13 +474,13 @@ static int32_t addMissingMetaData(PtrChangeSet changeSet, const string& groupId,
 
 static int32_t addExistingMembers(PtrChangeSet changeSet, const string &groupId, SQLiteStoreConv &store)
 {
-    list<JsonUnique> members;
+    list<JSONUnique> members;
     int32_t result = store.getAllGroupMembers(groupId, members);
     if (SQL_FAIL(result)) {
         return result;
     }
     for (auto& member: members) {
-        string name(Utilities::getJsonString(member.get(), MEMBER_ID, ""));
+        string name = member->value(MEMBER_ID, "");
         addAddNameToChangeSet(changeSet, name, "");
     }
     return SUCCESS;
@@ -1017,7 +1016,7 @@ int32_t AppInterfaceImpl::performGroupHellos(const string &userId, const string 
         return SUCCESS;
     }
 
-    list<JsonUnique>groups;
+    list<JSONUnique>groups;
 
     result = store_->listAllGroups(groups);
     if (SQL_FAIL(result)) {
@@ -1030,7 +1029,7 @@ int32_t AppInterfaceImpl::performGroupHellos(const string &userId, const string 
     }
 
     for (auto& group : groups) {
-        const string groupId = Utilities::getJsonString(group.get(), GROUP_ID, "");
+        const string groupId = group->value(GROUP_ID, "");
 
         if (store_->isMemberOfGroup(groupId, userId)) {
             result = performGroupHello(groupId, userId, deviceId, deviceName);

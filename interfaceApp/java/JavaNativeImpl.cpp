@@ -34,6 +34,8 @@ limitations under the License.
 
 using namespace zina;
 using namespace std;
+using json = nlohmann::json;
+
 
 /**
  * Define -DPACKAGE_NAME="Java_some_package_name_" to define another package 
@@ -63,23 +65,23 @@ using namespace std;
 JavaVM *t_getJavaVM();
 #endif
 
-static AppInterfaceImpl* zinaAppInterface = NULL;
-static JavaVM* javaVM = NULL;
+static AppInterfaceImpl* zinaAppInterface = nullptr;
+static JavaVM* javaVM = nullptr;
 
 // Set in doInit(...)
-static jobject zinaCallbackObject = NULL;
-static jmethodID receiveMessageCallback = NULL;
-static jmethodID stateReportCallback = NULL;
-static jmethodID httpHelperCallback = NULL;
-static jmethodID javaNotifyCallback = NULL;
-static jmethodID groupMsgReceiveCallback = NULL;
-static jmethodID groupCmdReceiveCallback = NULL;
-static jmethodID groupStateCallback = NULL;
+static jobject zinaCallbackObject = nullptr;
+static jmethodID receiveMessageCallback = nullptr;
+static jmethodID stateReportCallback = nullptr;
+static jmethodID httpHelperCallback = nullptr;
+static jmethodID javaNotifyCallback = nullptr;
+static jmethodID groupMsgReceiveCallback = nullptr;
+static jmethodID groupCmdReceiveCallback = nullptr;
+static jmethodID groupStateCallback = nullptr;
 
-static jclass preparedMessageDataClass = NULL;
-static jmethodID preparedMessageDataConsID = NULL;
-jfieldID transportIdID = NULL;
-jfieldID receiverInfoID = NULL;
+static jclass preparedMessageDataClass = nullptr;
+static jmethodID preparedMessageDataConsID = nullptr;
+jfieldID transportIdID = nullptr;
+jfieldID receiverInfoID = nullptr;
 
 static int32_t debugLevel = 1;
 
@@ -121,7 +123,7 @@ static void receiveData(const string &msgFileName)
 {
     uint8_t msgData[2000];
     FILE* msgFile = fopen(msgFileName.c_str(), "r");
-    if (msgFile == NULL) {
+    if (msgFile == nullptr) {
         Log("Message file %s not found\n", msgFileName.c_str());
         return;
     }
@@ -136,15 +138,15 @@ static void receiveData(const string &msgFileName)
 
 static bool arrayToString(JNIEnv* env, jbyteArray array, string* output)
 {
-    if (array == NULL)
+    if (array == nullptr)
         return false;
 
-    size_t dataLen = static_cast<size_t>(env->GetArrayLength(array));
+    auto dataLen = static_cast<size_t>(env->GetArrayLength(array));
     if (dataLen == 0)
         return false;
 
-    const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(array, 0);
-    if (tmp == NULL)
+    const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(array, nullptr);
+    if (tmp == nullptr)
         return false;
 
     output->assign((const char*)tmp, dataLen);
@@ -154,19 +156,19 @@ static bool arrayToString(JNIEnv* env, jbyteArray array, string* output)
 
 static jbyteArray stringToArray(JNIEnv* env, const string& input)
 {
-    if (input.size() == 0)
-        return NULL;
+    if (input.empty())
+        return nullptr;
 
     jbyteArray data = env->NewByteArray(static_cast<jsize>(input.size()));
-    if (data == NULL)
-        return NULL;
+    if (data == nullptr)
+        return nullptr;
     env->SetByteArrayRegion(data, 0, static_cast<jsize>(input.size()), (jbyte*)input.data());
     return data;
 }
 
 static void setReturnCode(JNIEnv* env, jintArray codeArray, int32_t result, int32_t data = 0)
 {
-    jint* code = env->GetIntArrayElements(codeArray, 0);
+    jint* code = env->GetIntArrayElements(codeArray, nullptr);
     code[0] = result;
     if (data != 0)
         code[1] = data;
@@ -181,7 +183,7 @@ class CTJNIEnv {
     JNIEnv *env;
     bool attached;
 public:
-    CTJNIEnv() : attached(false), env(NULL) {
+    CTJNIEnv() : attached(false), env(nullptr) {
 
 #ifdef EMBEDDED
         if (!javaVM)
@@ -194,12 +196,12 @@ public:
         int s = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
         if (s != JNI_OK){
 #ifdef ANDROID
-            s = javaVM->AttachCurrentThread(&env, NULL);
+            s = javaVM->AttachCurrentThread(&env, nullptr);
 #else
-            s = javaVM->AttachCurrentThread((void**)&env, NULL);
+            s = javaVM->AttachCurrentThread((void**)&env, nullptr);
 #endif
             if (!env || s < 0) {
-                env = NULL;
+                env = nullptr;
                 return;
             }
             attached = true;
@@ -228,7 +230,7 @@ void loadAxolotl()
  */
 static int32_t receiveMessage(const string& messageDescriptor, const string& attachmentDescriptor = string(), const string& messageAttributes = string())
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return -1;
 
     CTJNIEnv jni;
@@ -239,26 +241,26 @@ static int32_t receiveMessage(const string& messageDescriptor, const string& att
     jbyteArray message = stringToArray(env, messageDescriptor);
     Log("receiveMessage - message: '%s' - length: %d", messageDescriptor.c_str(), messageDescriptor.size());
 
-    jbyteArray attachment = NULL;
+    jbyteArray attachment = nullptr;
     if (!attachmentDescriptor.empty()) {
         attachment = stringToArray(env, attachmentDescriptor);
-        if (attachment == NULL) {
+        if (attachment == nullptr) {
             return -4;
         }
     }
-    jbyteArray attributes = NULL;
+    jbyteArray attributes = nullptr;
     if (!messageAttributes.empty()) {
         attributes = stringToArray(env, messageAttributes);
-        if (attributes == NULL) {
+        if (attributes == nullptr) {
             return -4;
         }
     }
     int32_t result = env->CallIntMethod(zinaCallbackObject, receiveMessageCallback, message, attachment, attributes);
 
     env->DeleteLocalRef(message);
-    if (attachment != NULL)
+    if (attachment != nullptr)
         env->DeleteLocalRef(attachment);
-    if (attributes != NULL)
+    if (attributes != nullptr)
         env->DeleteLocalRef(attributes);
 
     return result;
@@ -271,7 +273,7 @@ static int32_t receiveMessage(const string& messageDescriptor, const string& att
  */
 static int32_t receiveGroupMessage(const string& messageDescriptor, const string& attachmentDescriptor = string(), const string& messageAttributes = string())
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return -1;
 
     CTJNIEnv jni;
@@ -282,26 +284,26 @@ static int32_t receiveGroupMessage(const string& messageDescriptor, const string
     jbyteArray message = stringToArray(env, messageDescriptor);
     Log("receiveGroupMessage: '%s' - length: %d", messageDescriptor.c_str(), messageDescriptor.size());
 
-    jbyteArray attachment = NULL;
+    jbyteArray attachment = nullptr;
     if (!attachmentDescriptor.empty()) {
         attachment = stringToArray(env, attachmentDescriptor);
-        if (attachment == NULL) {
+        if (attachment == nullptr) {
             return -4;
         }
     }
-    jbyteArray attributes = NULL;
+    jbyteArray attributes = nullptr;
     if (!messageAttributes.empty()) {
         attributes = stringToArray(env, messageAttributes);
-        if (attributes == NULL) {
+        if (attributes == nullptr) {
             return -4;
         }
     }
     int32_t result = env->CallIntMethod(zinaCallbackObject, groupMsgReceiveCallback, message, attachment, attributes);
 
     env->DeleteLocalRef(message);
-    if (attachment != NULL)
+    if (attachment != nullptr)
         env->DeleteLocalRef(attachment);
-    if (attributes != NULL)
+    if (attributes != nullptr)
         env->DeleteLocalRef(attributes);
 
     return result;
@@ -314,7 +316,7 @@ static int32_t receiveGroupMessage(const string& messageDescriptor, const string
  */
 static int32_t receiveGroupCommand(const string& commandMessage)
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return -1;
 
     CTJNIEnv jni;
@@ -339,7 +341,7 @@ static int32_t receiveGroupCommand(const string& commandMessage)
  */
 static void messageStateReport(int64_t messageIdentifier, int32_t statusCode, const string& stateInformation)
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return;
 
     CTJNIEnv jni;
@@ -347,12 +349,12 @@ static void messageStateReport(int64_t messageIdentifier, int32_t statusCode, co
     if (!env)
         return;
 
-    jbyteArray information = NULL;
+    jbyteArray information = nullptr;
     if (!stateInformation.empty()) {
         information = stringToArray(env, stateInformation);
     }
     env->CallVoidMethod(zinaCallbackObject, stateReportCallback, messageIdentifier, statusCode, information);
-    if (information != NULL)
+    if (information != nullptr)
         env->DeleteLocalRef(information);
 }
 
@@ -363,7 +365,7 @@ static void messageStateReport(int64_t messageIdentifier, int32_t statusCode, co
  */
 static void groupStateReport(int32_t statusCode, const string& stateInformation)
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return;
 
     CTJNIEnv jni;
@@ -371,12 +373,12 @@ static void groupStateReport(int32_t statusCode, const string& stateInformation)
     if (!env)
         return;
 
-    jbyteArray information = NULL;
+    jbyteArray information = nullptr;
     if (!stateInformation.empty()) {
         information = stringToArray(env, stateInformation);
     }
     env->CallVoidMethod(zinaCallbackObject, groupStateCallback, statusCode, information);
-    if (information != NULL)
+    if (information != nullptr)
         env->DeleteLocalRef(information);
 }
 
@@ -387,7 +389,7 @@ static void groupStateReport(int32_t statusCode, const string& stateInformation)
  */
 static void notifyCallback(int32_t notifyAction, const string& actionInformation, const string& devId)
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return;
 
     CTJNIEnv jni;
@@ -395,20 +397,20 @@ static void notifyCallback(int32_t notifyAction, const string& actionInformation
     if (!env)
         return;
 
-    jbyteArray information = NULL;
+    jbyteArray information = nullptr;
     if (!actionInformation.empty()) {
         information = stringToArray(env, actionInformation);
     }
-    jbyteArray deviceId = NULL;
+    jbyteArray deviceId = nullptr;
     if (!devId.empty()) {
         deviceId = stringToArray(env, devId);
     }
     env->CallVoidMethod(zinaCallbackObject, javaNotifyCallback, notifyAction, information, deviceId);
 
-    if (information != NULL)
+    if (information != nullptr)
         env->DeleteLocalRef(information);
 
-    if (deviceId != NULL)
+    if (deviceId != nullptr)
         env->DeleteLocalRef(deviceId);
 }
 
@@ -424,7 +426,7 @@ static void notifyCallback(int32_t notifyAction, const string& actionInformation
 #if defined JAVA_HELPER || defined UNITTESTS
 static int32_t httpHelper(const string& requestUri, const string& method, const string& requestData, string* response)
 {
-    if (zinaCallbackObject == NULL)
+    if (zinaCallbackObject == nullptr)
         return -1;
 
     CTJNIEnv jni;
@@ -434,13 +436,13 @@ static int32_t httpHelper(const string& requestUri, const string& method, const 
         return -2;
     }
 
-    jbyteArray uri = NULL;
+    jbyteArray uri = nullptr;
     uri = env->NewByteArray(static_cast<jsize>(requestUri.size()));
-    if (uri == NULL)
+    if (uri == nullptr)
         return -3;
     env->SetByteArrayRegion(uri, 0, static_cast<jsize>(requestUri.size()), (jbyte*)requestUri.data());
 
-    jbyteArray reqData = NULL;
+    jbyteArray reqData = nullptr;
     if (!requestData.empty()) {
         reqData = stringToArray(env, requestData);
     }
@@ -448,15 +450,15 @@ static int32_t httpHelper(const string& requestUri, const string& method, const 
 
     jintArray code = env->NewIntArray(1);
 
-    jbyteArray data = (jbyteArray)env->CallObjectMethod(zinaCallbackObject, httpHelperCallback, uri, mthod, reqData, code);
-     if (data != NULL) {
+    auto data = (jbyteArray)env->CallObjectMethod(zinaCallbackObject, httpHelperCallback, uri, mthod, reqData, code);
+     if (data != nullptr) {
         arrayToString(env, data, response);
     }
     int32_t result = -1;
     env->GetIntArrayRegion(code, 0, 1, &result);
 
     env->DeleteLocalRef(uri);
-    if (reqData != NULL)
+    if (reqData != nullptr)
         env->DeleteLocalRef(reqData);
     env->DeleteLocalRef(mthod);
     env->DeleteLocalRef(code);
@@ -522,59 +524,59 @@ JNI_FUNCTION(doInit)(JNIEnv* env, jobject thiz, jint flags, jstring dbName, jbyt
     debugLevel = flags & 0xf;
 //    int32_t flagsInternal = flags >> 4;
 
-    if (zinaCallbackObject == NULL) {
+    if (zinaCallbackObject == nullptr) {
         zinaCallbackObject = env->NewGlobalRef(thiz);
-        if (zinaCallbackObject == NULL) {
+        if (zinaCallbackObject == nullptr) {
             return -1;
         }
-        jclass callbackClass = NULL;
+        jclass callbackClass = nullptr;
         callbackClass = env->GetObjectClass(zinaCallbackObject);
-        if (callbackClass == NULL) {
+        if (callbackClass == nullptr) {
             return -2;
         }
         receiveMessageCallback = env->GetMethodID(callbackClass, "receiveMessage", "([B[B[B)I");
-        if (receiveMessageCallback == NULL) {
+        if (receiveMessageCallback == nullptr) {
             return -3;
         }
         stateReportCallback = env->GetMethodID(callbackClass, "messageStateReport", "(JI[B)V");
-        if (stateReportCallback == NULL) {
+        if (stateReportCallback == nullptr) {
             return -4;
         }
         httpHelperCallback = env->GetMethodID(callbackClass, "httpHelper", "([BLjava/lang/String;[B[I)[B");
-        if (httpHelperCallback == NULL) {
+        if (httpHelperCallback == nullptr) {
             return -5;
         }
         javaNotifyCallback = env->GetMethodID(callbackClass, "notifyCallback", "(I[B[B)V");
-        if (javaNotifyCallback == NULL) {
+        if (javaNotifyCallback == nullptr) {
             return -6;
         }
         groupMsgReceiveCallback = env->GetMethodID(callbackClass, "groupMsgReceive", "([B[B[B)I");
-        if (groupMsgReceiveCallback == NULL) {
+        if (groupMsgReceiveCallback == nullptr) {
             return -20;
         }
         groupCmdReceiveCallback = env->GetMethodID(callbackClass, "groupCmdReceive", "([B)I");
-        if (groupCmdReceiveCallback == NULL) {
+        if (groupCmdReceiveCallback == nullptr) {
             return -21;
         }
         groupStateCallback = env->GetMethodID(callbackClass, "groupStateCallback", "(I[B)V");
-        if (groupStateCallback == NULL) {
+        if (groupStateCallback == nullptr) {
             return -22;
         }
     }
     // Prepare access to the PreparedMessageData Java class inside ZinaNative.
     jclass tempClassRef = env->FindClass( "zina/ZinaNative$PreparedMessageData" );
-    if (tempClassRef == NULL)
+    if (tempClassRef == nullptr)
         return -24;
     preparedMessageDataClass = reinterpret_cast<jclass>(env->NewGlobalRef(tempClassRef));
 
     transportIdID = env->GetFieldID(preparedMessageDataClass, "transportId", "J");
-    if (transportIdID == NULL)
+    if (transportIdID == nullptr)
         return -25;
     receiverInfoID = env->GetFieldID(preparedMessageDataClass, "receiverInfo", "Ljava/lang/String;");
-    if (receiverInfoID == NULL)
+    if (receiverInfoID == nullptr)
         return -26;
     preparedMessageDataConsID = env->GetMethodID(preparedMessageDataClass, "<init>", "()V");
-    if (preparedMessageDataConsID == NULL)
+    if (preparedMessageDataConsID == nullptr)
         return -27;
 
     string name;
@@ -594,13 +596,13 @@ JNI_FUNCTION(doInit)(JNIEnv* env, jobject thiz, jint flags, jstring dbName, jbyt
     if (retentionFlags == nullptr)
         return -28;
 
-    const char* tmp = env->GetStringUTFChars(retentionFlags, 0);
+    const char* tmp = env->GetStringUTFChars(retentionFlags, nullptr);
     string retentionString(tmp);
     env->ReleaseStringUTFChars(retentionFlags, tmp);
 
-    const uint8_t* pw = (uint8_t*)env->GetByteArrayElements(dbPassphrase, 0);
-    size_t pwLen = static_cast<size_t>(env->GetArrayLength(dbPassphrase));
-    if (pw == NULL)
+    const uint8_t* pw = (uint8_t*)env->GetByteArrayElements(dbPassphrase, nullptr);
+    auto pwLen = static_cast<size_t>(env->GetArrayLength(dbPassphrase));
+    if (pw == nullptr)
         return -14;
 
     if (pwLen != 32) {
@@ -608,7 +610,7 @@ JNI_FUNCTION(doInit)(JNIEnv* env, jobject thiz, jint flags, jstring dbName, jbyt
         return -15;
     }
 
-    if (dbName == NULL)
+    if (dbName == nullptr)
         return -16;
 
     string dbPw((const char*)pw, pwLen);
@@ -620,7 +622,7 @@ JNI_FUNCTION(doInit)(JNIEnv* env, jobject thiz, jint flags, jstring dbName, jbyt
     SQLiteStoreConv* store = SQLiteStoreConv::getStore();
     store->setKey(dbPw);
 
-    const char* db = env->GetStringUTFChars(dbName, 0);
+    const char* db = env->GetStringUTFChars(dbName, nullptr);
     store->openStore(string (db));
     env->ReleaseStringUTFChars(dbName, db);
 
@@ -672,7 +674,7 @@ static jobjectArray fillPrepMsgDataToJava(JNIEnv* env, unique_ptr<list<unique_pt
 {
     size_t size = prepMessageData->size();
 
-    jobjectArray result = env->NewObjectArray(static_cast<jsize>(size), preparedMessageDataClass, NULL);
+    jobjectArray result = env->NewObjectArray(static_cast<jsize>(size), preparedMessageDataClass, nullptr);
 
     int32_t i = 0;
     while (!prepMessageData->empty()) {
@@ -703,23 +705,23 @@ JNI_FUNCTION(prepareMessageNormal)(JNIEnv* env, jclass clazz, jbyteArray message
 {
     (void)clazz;
 
-    if (code == NULL || env->GetArrayLength(code) < 1 || messageDescriptor == NULL || zinaAppInterface == NULL)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1 || messageDescriptor == nullptr || zinaAppInterface == nullptr)
+        return nullptr;
 
     string message;
     if (!arrayToString(env, messageDescriptor, &message)) {
         setReturnCode(env, code, DATA_MISSING);
-        return NULL;
+        return nullptr;
     }
     Log("prepareMessage - message: '%s' - length: %d", message.c_str(), message.size());
 
     string attachment;
-    if (attachmentDescriptor != NULL) {
+    if (attachmentDescriptor != nullptr) {
         arrayToString(env, attachmentDescriptor, &attachment);
         Log("prepareMessage - attachment: '%s' - length: %d", attachment.c_str(), attachment.size());
     }
     string attributes;
-    if (messageAttributes != NULL) {
+    if (messageAttributes != nullptr) {
         arrayToString(env, messageAttributes, &attributes);
         Log("prepareMessage - attributes: '%s' - length: %d", attributes.c_str(), attributes.size());
     }
@@ -728,7 +730,7 @@ JNI_FUNCTION(prepareMessageNormal)(JNIEnv* env, jclass clazz, jbyteArray message
                                                                   static_cast<bool>(normalMsg), &error);
     if (error != SUCCESS) {
         setReturnCode(env, code, error);
-        return NULL;
+        return nullptr;
     }
     return fillPrepMsgDataToJava(env, move(prepMessageData));
 }
@@ -745,23 +747,23 @@ JNI_FUNCTION(prepareMessageSiblings)(JNIEnv* env, jclass clazz, jbyteArray messa
 {
     (void)clazz;
 
-    if (code == NULL || env->GetArrayLength(code) < 1 || messageDescriptor == NULL || zinaAppInterface == NULL)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1 || messageDescriptor == nullptr || zinaAppInterface == nullptr)
+        return nullptr;
 
     string message;
     if (!arrayToString(env, messageDescriptor, &message)) {
         setReturnCode(env, code, DATA_MISSING);
-        return NULL;
+        return nullptr;
     }
     Log("prepareMessageToSiblings - message: '%s' - length: %d", message.c_str(), message.size());
 
     string attachment;
-    if (attachmentDescriptor != NULL) {
+    if (attachmentDescriptor != nullptr) {
         arrayToString(env, attachmentDescriptor, &attachment);
         Log("prepareMessageToSiblings - attachment: '%s' - length: %d", attachment.c_str(), attachment.size());
     }
     string attributes;
-    if (messageAttributes != NULL) {
+    if (messageAttributes != nullptr) {
         arrayToString(env, messageAttributes, &attributes);
         Log("prepareMessageToSiblings - attributes: '%s' - length: %d", attributes.c_str(), attributes.size());
     }
@@ -771,7 +773,7 @@ JNI_FUNCTION(prepareMessageSiblings)(JNIEnv* env, jclass clazz, jbyteArray messa
                                                                     static_cast<bool>(normalMsg), &error);
     if (error != SUCCESS) {
         setReturnCode(env, code, error);
-        return NULL;
+        return nullptr;
     }
     return fillPrepMsgDataToJava(env, move(prepMessageData));
 }
@@ -786,15 +788,15 @@ JNI_FUNCTION(doSendMessages)(JNIEnv* env, jclass clazz, jlongArray ids)
 {
     (void)clazz;
 
-    if (ids == NULL)
+    if (ids == nullptr)
         return DATA_MISSING;
 
-    size_t dataLen = static_cast<size_t>(env->GetArrayLength(ids));
+    auto dataLen = static_cast<size_t>(env->GetArrayLength(ids));
     if (dataLen < 1)
         return DATA_MISSING;
 
-    const uint64_t* tmp = (uint64_t*)env->GetLongArrayElements(ids, 0);
-    if (tmp == NULL)
+    const uint64_t* tmp = (uint64_t*)env->GetLongArrayElements(ids, nullptr);
+    if (tmp == nullptr)
         return DATA_MISSING;
 
     auto idVector = make_shared<vector<uint64_t> >();
@@ -816,15 +818,15 @@ JNI_FUNCTION(removePreparedMessages)(JNIEnv* env, jclass clazz, jlongArray ids)
 {
     (void)clazz;
 
-    if (ids == NULL)
+    if (ids == nullptr)
         return DATA_MISSING;
 
-    size_t dataLen = static_cast<size_t>(env->GetArrayLength(ids));
+    auto dataLen = static_cast<size_t>(env->GetArrayLength(ids));
     if (dataLen < 1)
         return DATA_MISSING;
 
-    const uint64_t* tmp = (uint64_t*)env->GetLongArrayElements(ids, 0);
-    if (tmp == NULL)
+    const uint64_t* tmp = (uint64_t*)env->GetLongArrayElements(ids, nullptr);
+    if (tmp == nullptr)
         return DATA_MISSING;
 
     auto idVector = make_shared<vector<uint64_t> >();
@@ -847,17 +849,17 @@ JNI_FUNCTION(getKnownUsers)(JNIEnv* env, jclass clazz)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
     string* jsonNames = zinaAppInterface->getKnownUsers();
-    if (jsonNames == NULL)
-        return NULL;
+    if (jsonNames == nullptr)
+        return nullptr;
 
     size_t size = jsonNames->size();
-    jbyteArray names = NULL;
+    jbyteArray names = nullptr;
     names = env->NewByteArray(static_cast<jsize>(size));
-    if (names != NULL) {
+    if (names != nullptr) {
         env->SetByteArrayRegion(names, 0, static_cast<jsize>(size), (jbyte*)jsonNames->data());
     }
     delete jsonNames;
@@ -874,8 +876,8 @@ JNI_FUNCTION(getOwnIdentityKey) (JNIEnv* env, jclass clazz)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
     string idKey = zinaAppInterface->getOwnIdentityKey();
     jbyteArray key = stringToArray(env, idKey);
@@ -893,13 +895,13 @@ JNI_FUNCTION(getIdentityKeys) (JNIEnv* env, jclass clazz, jbyteArray userName)
     (void)clazz;
 
     string name;
-    if (!arrayToString(env, userName, &name) || zinaAppInterface == NULL)
-        return NULL;
+    if (!arrayToString(env, userName, &name) || zinaAppInterface == nullptr)
+        return nullptr;
 
     shared_ptr<list<string> > idKeys = zinaAppInterface->getIdentityKeys(name);
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(idKeys->size()), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(idKeys->size()), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (; !idKeys->empty(); idKeys->pop_front()) {
@@ -922,32 +924,29 @@ JNI_FUNCTION(getZinaDevicesUser) (JNIEnv* env, jclass clazz, jbyteArray userName
     (void)clazz;
 
     string name;
-    if (!arrayToString(env, userName, &name) || zinaAppInterface == NULL)
-        return NULL;
+    if (!arrayToString(env, userName, &name) || zinaAppInterface == nullptr)
+        return nullptr;
 
     list<pair<string, string> > devices;
     Provisioning::getZinaDeviceIds(name, zinaAppInterface->getOwnAuthrization(), devices);
 
     if (devices.empty()) {
-        return NULL;
+        return nullptr;
     }
 
-    cJSON *root,*devArray, *devInfo;
-    root = cJSON_CreateObject();
-    cJSON_AddItemToObject(root, "version", cJSON_CreateNumber(1));
-    cJSON_AddItemToObject(root, "devices", devArray = cJSON_CreateArray());
+    json jsn;
+    jsn["version"] = 1;
 
+    json devArray = json::array();
     for (auto &idName : devices) {
-        devInfo = cJSON_CreateObject();
-        cJSON_AddStringToObject(devInfo, "id", idName.first.c_str());
-        cJSON_AddStringToObject(devInfo, "device_name", idName.second.c_str());
-        cJSON_AddItemToArray(devArray, devInfo);
+        json devInfo;
+        devInfo["id"] = idName.first;
+        devInfo["device_name"] = idName.second;
+        devArray += devInfo;
     }
+    jsn["devices"] = devArray;
 
-    char *out = cJSON_Print(root);
-    string json(out);
-    cJSON_Delete(root); free(out);
-
+    string json = jsn.dump();
     jbyteArray retData = stringToArray(env, json);
     return retData;
 }
@@ -964,18 +963,18 @@ JNI_FUNCTION(registerZinaDevice)(JNIEnv* env, jclass clazz, jintArray code)
     (void)clazz;
 
     string info;
-    if (code == NULL || env->GetArrayLength(code) < 1 || zinaAppInterface == NULL)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1 || zinaAppInterface == nullptr)
+        return nullptr;
 
     int32_t result = zinaAppInterface->registerZinaDevice(&info);
 
     setReturnCode(env, code, result);
 
-    jbyteArray infoBytes = NULL;
+    jbyteArray infoBytes = nullptr;
     if (!info.empty()) {
         size_t size = info.size();
         infoBytes = env->NewByteArray(static_cast<jsize>(size));
-        if (infoBytes != NULL) {
+        if (infoBytes != nullptr) {
             env->SetByteArrayRegion(infoBytes, 0, static_cast<jsize>(size), (jbyte*)info.data());
         }
     }
@@ -993,23 +992,23 @@ JNI_FUNCTION(removeZinaDevice) (JNIEnv* env, jclass clazz, jbyteArray deviceId, 
     (void)clazz;
 
     string info;
-    if (code == NULL || env->GetArrayLength(code) < 1 || zinaAppInterface == NULL)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1 || zinaAppInterface == nullptr)
+        return nullptr;
 
     string devId;
     if (!arrayToString(env, deviceId, &devId))
-        return NULL;
+        return nullptr;
 
 
     int32_t result = zinaAppInterface->removeZinaDevice(devId, &info);
 
     setReturnCode(env, code, result);
 
-    jbyteArray infoBytes = NULL;
+    jbyteArray infoBytes = nullptr;
     if (!info.empty()) {
         size_t size = info.size();
         infoBytes = env->NewByteArray(static_cast<jsize>(size));
-        if (infoBytes != NULL) {
+        if (infoBytes != nullptr) {
             env->SetByteArrayRegion(infoBytes, 0, static_cast<jsize>(size), (jbyte*)info.data());
         }
     }
@@ -1027,7 +1026,7 @@ JNI_FUNCTION(newPreKeys)(JNIEnv* env, jclass clazz, jint numbers)
 {
     (void)clazz;
     (void)env;
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return -1;
 
     return zinaAppInterface->newPreKeys(numbers);
@@ -1043,7 +1042,7 @@ JNI_FUNCTION(getNumPreKeys) (JNIEnv* env, jclass clazz)
 {
     (void)clazz;
     (void)env;
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return -1;
 
     return zinaAppInterface->getNumPreKeys();
@@ -1059,7 +1058,7 @@ JNI_FUNCTION(getErrorCode)(JNIEnv* env, jclass clazz)
 {
     (void)clazz;
     (void)env;
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return -1;
 
     return zinaAppInterface->getErrorCode();
@@ -1074,8 +1073,8 @@ JNIEXPORT jstring JNICALL
 JNI_FUNCTION(getErrorInfo)(JNIEnv* env, jclass clazz)
 {
     (void)clazz;
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
     const string info = zinaAppInterface->getErrorInfo();
     jstring errInfo = env->NewStringUTF(info.c_str());
@@ -1093,14 +1092,14 @@ JNI_FUNCTION(testCommand)(JNIEnv* env, jclass clazz, jstring command, jbyteArray
     (void)clazz;
 
     int32_t result = 0;
-    const char* cmd = env->GetStringUTFChars(command, 0);
+    const char* cmd = env->GetStringUTFChars(command, nullptr);
 
     string dataContainer;
-    if (data != NULL) {
-        size_t dataLen = static_cast<size_t>(env->GetArrayLength(data));
+    if (data != nullptr) {
+        auto dataLen = static_cast<size_t>(env->GetArrayLength(data));
         if (dataLen > 0) {
-            const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(data, 0);
-            if (tmp != NULL) {
+            const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(data, nullptr);
+            if (tmp != nullptr) {
                 dataContainer.assign((const char*)tmp, dataLen);
                 env->ReleaseByteArrayElements(data, (jbyte*)tmp, 0);
             }
@@ -1141,9 +1140,9 @@ JNI_FUNCTION(zinaCommand) (JNIEnv* env, jclass clazz, jstring command, jbyteArra
 
     if (command == nullptr || zinaAppInterface == nullptr || code == nullptr ||  env->GetArrayLength(code) < 1)
         return nullptr;
-    const char* cmd = env->GetStringUTFChars(command, 0);
+    const char* cmd = env->GetStringUTFChars(command, nullptr);
 
-    jstring result = NULL;
+    jstring result = nullptr;
     setReturnCode(env, code, SUCCESS);
 
     string dataContainer;
@@ -1168,28 +1167,20 @@ JNI_FUNCTION(zinaCommand) (JNIEnv* env, jclass clazz, jstring command, jbyteArra
         zinaAppInterface->reKeyAllDevices(dataContainer);
     }
     else if (strcmp("reSyncConversation", cmd) == 0 && !dataContainer.empty()) {
-        cJSON* root = cJSON_Parse(dataContainer.c_str());
-        cJSON* details = NULL;
-        if (root != NULL) {
-            details = cJSON_GetObjectItem(root, "details");
+        try {
+            json jsn = json::parse(dataContainer);
+            json details = jsn.value("details", nullptr);
+            if (details != nullptr) {
+                string userName = details.value("name", "");
+                string deviceId = details.value("scClientDevId", "");
+                if (!userName.empty() && !deviceId.empty()) {
+                    zinaAppInterface->reKeyDevice(userName, deviceId);
+                }
+            }
+        } catch(json::parse_error&) {
+            return nullptr;
         }
-        if (details != NULL) {
 
-            string userName;
-            cJSON *jsonItem = cJSON_GetObjectItem(details, "name");
-            if (jsonItem != NULL) {
-                userName.assign(jsonItem->valuestring);
-            }
-            string deviceId;
-            jsonItem = cJSON_GetObjectItem(details, "scClientDevId");
-            if (jsonItem != NULL) {
-                deviceId.assign(jsonItem->valuestring);
-            }
-            if (!userName.empty() && !deviceId.empty()) {
-                zinaAppInterface->reKeyDevice(userName, deviceId);
-            }
-        }
-        cJSON_Delete(root);
     }
     else if (strcmp("clearGroupData", cmd) == 0) {
         zinaAppInterface->clearGroupData();
@@ -1200,22 +1191,16 @@ JNI_FUNCTION(zinaCommand) (JNIEnv* env, jclass clazz, jstring command, jbyteArra
         zinaAppInterface->retryReceivedMessages();
     }
     else if (strcmp("setIdKeyVerified", cmd) == 0 && !dataContainer.empty()) {
-        cJSON* root = cJSON_Parse(dataContainer.c_str());
-        if (root != nullptr) {
-            string userName;
-            cJSON *jsonItem = cJSON_GetObjectItem(root, "name");
-            if (jsonItem != NULL) {
-                userName.assign(jsonItem->valuestring);
-            }
-            string deviceId;
-            jsonItem = cJSON_GetObjectItem(root, "scClientDevId");
-            if (jsonItem != NULL) {
-                deviceId.assign(jsonItem->valuestring);
-            }
-            bool flag = Utilities::getJsonBool(root, "flag", true);
+        try {
+            json jsn = json::parse(dataContainer);
+            string userName = jsn.value("name", "");
+            string deviceId = jsn.value("scClientDevId", "");
+            bool flag = jsn.value("flag", true);
             if (!userName.empty() && !deviceId.empty()) {
                 zinaAppInterface->setIdKeyVerified(userName, deviceId, flag);
             }
+        } catch(json::parse_error&) {
+            return nullptr;
         }
     }
     env->ReleaseStringUTFChars(command, cmd);
@@ -1238,8 +1223,8 @@ JNI_FUNCTION(createNewGroup)(JNIEnv *env, jclass clazz, jbyteArray groupName, jb
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
     string group;
     arrayToString(env, groupName, &group);
@@ -1249,7 +1234,7 @@ JNI_FUNCTION(createNewGroup)(JNIEnv *env, jclass clazz, jbyteArray groupName, jb
 
     string groupUuid = zinaAppInterface->createNewGroup(group, description);
     if (groupUuid.empty())
-        return NULL;
+        return nullptr;
     jstring uuidJava = env->NewStringUTF(groupUuid.c_str());
     return uuidJava;
 }
@@ -1264,14 +1249,14 @@ JNICALL JNI_FUNCTION(modifyGroupSize)(JNIEnv *env, jclass clazz, jstring groupUu
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return JNI_FALSE;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return JNI_FALSE;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
     bool result = zinaAppInterface->modifyGroupSize(group, newSize);
@@ -1288,22 +1273,22 @@ JNI_FUNCTION(setGroupName)(JNIEnv *env, jclass clazz, jstring groupUuid, jbyteAr
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
     string nm;
-    if (name != NULL) {
+    if (name != nullptr) {
         arrayToString(env, name, &nm);
     }
-    return zinaAppInterface->setGroupName(group, name == NULL? nullptr : &nm);
+    return zinaAppInterface->setGroupName(group, name == nullptr? nullptr : &nm);
 }
 
 /*
@@ -1316,14 +1301,14 @@ JNI_FUNCTION(setGroupBurnTime)(JNIEnv *env, jclass clazz, jstring groupUuid, jlo
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
     return zinaAppInterface->setGroupBurnTime(group, static_cast<uint64_t>(duration), mode);
@@ -1339,22 +1324,22 @@ JNI_FUNCTION(setGroupAvatar)(JNIEnv *env, jclass clazz, jstring groupUuid, jbyte
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
     string av;
-    if (avatar != NULL) {
+    if (avatar != nullptr) {
         arrayToString(env, avatar, &av);
     }
-    return zinaAppInterface->setGroupAvatar(group, avatar == NULL? nullptr : &av);
+    return zinaAppInterface->setGroupAvatar(group, avatar == nullptr? nullptr : &av);
 }
 
 /*
@@ -1367,28 +1352,26 @@ JNI_FUNCTION(listAllGroups)(JNIEnv *env, jclass clazz, jintArray code)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
-    list<JsonUnique> groups;
+    list<JSONUnique> groups;
     int32_t result = zinaAppInterface->getStore()->listAllGroups(groups);
     setReturnCode(env, code, result);
 
     size_t size = groups.size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (auto& group : groups) {
-        CharUnique out(cJSON_PrintUnformatted(group.get()));
-        jbyteArray retData = stringToArray(env, out.get());
-
+        jbyteArray retData = stringToArray(env, group->dump());
         env->SetObjectArrayElement(retArray, index++, retData);
         env->DeleteLocalRef(retData);
     }
@@ -1405,37 +1388,35 @@ JNI_FUNCTION(listAllGroupsWithMember)(JNIEnv *env, jclass clazz, jstring partici
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (participantUuid == NULL)
-        return NULL;
+    if (participantUuid == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     string participant;
-    const char* temp = env->GetStringUTFChars(participantUuid, 0);
+    const char* temp = env->GetStringUTFChars(participantUuid, nullptr);
     participant = temp;
     env->ReleaseStringUTFChars(participantUuid, temp);
 
 
-    list<JsonUnique> groups;
+    list<JSONUnique> groups;
     int32_t result = zinaAppInterface->getStore()->listAllGroupsWithMember(participant, groups);
     setReturnCode(env, code, result);
 
     size_t size = groups.size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (auto& group : groups) {
-        CharUnique out(cJSON_PrintUnformatted(group.get()));
-        jbyteArray retData = stringToArray(env, out.get());
-
+        jbyteArray retData = stringToArray(env, group->dump());
         env->SetObjectArrayElement(retArray, index++, retData);
         env->DeleteLocalRef(retData);
     }
@@ -1452,31 +1433,25 @@ JNI_FUNCTION(getGroup)(JNIEnv *env, jclass clazz, jstring groupUuid, jintArray c
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
-    if (groupUuid == NULL)
-        return NULL;
+    if (groupUuid == nullptr)
+        return nullptr;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
     int32_t result;
-    shared_ptr<cJSON> groupJson = zinaAppInterface->getStore()->listGroup(group, &result);
+    JSONUnique groupJson = zinaAppInterface->getStore()->listGroup(group, &result);
 
     setReturnCode(env, code, result);
-    char *out = cJSON_PrintUnformatted(groupJson.get());
-    jbyteArray retArray = NULL;
-    if (out != NULL) {
-        retArray = stringToArray(env, out);
-        free(out);
-    }
-    return retArray;
+    return stringToArray(env, groupJson->dump());
 }
 
 /*
@@ -1489,36 +1464,34 @@ JNI_FUNCTION(getAllGroupMembers)(JNIEnv *env, jclass clazz, jstring groupUuid, j
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
-    if (groupUuid == NULL)
-        return NULL;
+    if (groupUuid == nullptr)
+        return nullptr;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
-    list<JsonUnique> members;
+    list<JSONUnique> members;
     int32_t result = zinaAppInterface->getStore()->getAllGroupMembers(group, members);
     setReturnCode(env, code, result);
 
     size_t size = members.size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (auto& it : members) {
-        CharUnique out(cJSON_PrintUnformatted(it.get()));
-        jbyteArray retData = stringToArray(env, out.get());
-
+        jbyteArray retData = stringToArray(env, it->dump());
         env->SetObjectArrayElement(retArray, index++, retData);
         env->DeleteLocalRef(retData);
     }
@@ -1535,17 +1508,17 @@ JNI_FUNCTION(getAllGroupMemberUuids)(JNIEnv *env, jclass clazz, jstring groupUui
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
-    if (groupUuid == NULL)
-        return NULL;
+    if (groupUuid == nullptr)
+        return nullptr;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1555,10 +1528,10 @@ JNI_FUNCTION(getAllGroupMemberUuids)(JNIEnv *env, jclass clazz, jstring groupUui
 
     size_t size = members.size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (auto& it : members) {
@@ -1580,33 +1553,30 @@ JNI_FUNCTION(getGroupMember) (JNIEnv *env, jclass clazz, jstring groupUuid, jbyt
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
-        return NULL;
+    if (zinaAppInterface == nullptr)
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
-    if (groupUuid == NULL)
-        return NULL;
+    if (groupUuid == nullptr)
+        return nullptr;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
     string memberId;
     if (!arrayToString(env, memberUuid, &memberId)) {
-        return NULL;
+        return nullptr;
     }
 
     int32_t result;
-    shared_ptr<cJSON> memberJson = zinaAppInterface->getStore()->getGroupMember(group, memberId, &result);
+    JSONUnique memberJson = zinaAppInterface->getStore()->getGroupMember(group, memberId, &result);
     setReturnCode(env, code, result);
 
-    char *out = cJSON_PrintUnformatted(memberJson.get());
-    jbyteArray retArray = stringToArray(env, out);
-    free(out);
-    return retArray;
+    return stringToArray(env, memberJson->dump());
 }
 
 /*
@@ -1619,14 +1589,14 @@ JNI_FUNCTION(addUser)(JNIEnv *env, jclass clazz, jstring groupUuid, jbyteArray u
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1647,14 +1617,14 @@ JNI_FUNCTION(removeUserFromAddUpdate)(JNIEnv *env, jclass clazz, jstring groupUu
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1675,14 +1645,14 @@ JNI_FUNCTION(cancelGroupChangeSet)(JNIEnv *env, jclass clazz, jstring groupUuid)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
     return zinaAppInterface->cancelGroupChangeSet(group);
@@ -1698,14 +1668,14 @@ JNI_FUNCTION(applyGroupChangeSet)(JNIEnv *env, jclass clazz, jstring groupUuid)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
     return zinaAppInterface->applyGroupChangeSet(group);
@@ -1721,7 +1691,7 @@ JNI_FUNCTION(sendGroupMessage)(JNIEnv *env, jclass clazz, jbyteArray messageDesc
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
     string message;
@@ -1731,12 +1701,12 @@ JNI_FUNCTION(sendGroupMessage)(JNIEnv *env, jclass clazz, jbyteArray messageDesc
     Log("sendGroupMessage - message: '%s' - length: %d", message.c_str(), message.size());
 
     string attachment;
-    if (attachmentDescriptor != NULL) {
+    if (attachmentDescriptor != nullptr) {
         arrayToString(env, attachmentDescriptor, &attachment);
         Log("sendGroupMessage - attachment: '%s' - length: %d", attachment.c_str(), attachment.size());
     }
     string attributes;
-    if (messageAttributes != NULL) {
+    if (messageAttributes != nullptr) {
         arrayToString(env, messageAttributes, &attributes);
         Log("sendGroupMessage - attributes: '%s' - length: %d", attributes.c_str(), attributes.size());
     }
@@ -1754,7 +1724,7 @@ JNI_FUNCTION(sendGroupMessageToMember)(JNIEnv *env, jclass clazz, jbyteArray mes
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
     string message;
@@ -1768,18 +1738,18 @@ JNI_FUNCTION(sendGroupMessageToMember)(JNIEnv *env, jclass clazz, jbyteArray mes
     Log("sendGroupMessageToMember - message: '%s' - length: %d", message.c_str(), message.size());
 
     string attachment;
-    if (attachmentDescriptor != NULL) {
+    if (attachmentDescriptor != nullptr) {
         arrayToString(env, attachmentDescriptor, &attachment);
         Log("sendGroupMessageToMember - attachment: '%s' - length: %d", attachment.c_str(), attachment.size());
     }
     string attributes;
-    if (messageAttributes != NULL) {
+    if (messageAttributes != nullptr) {
         arrayToString(env, messageAttributes, &attributes);
         Log("sendGroupMessageToMember - attributes: '%s' - length: %d", attributes.c_str(), attributes.size());
     }
     string devId;
     if (deviceId != nullptr) {
-        const char *temp = env->GetStringUTFChars(deviceId, 0);
+        const char *temp = env->GetStringUTFChars(deviceId, nullptr);
         devId = temp;
         env->ReleaseStringUTFChars(deviceId, temp);
     }
@@ -1797,13 +1767,13 @@ JNI_FUNCTION(sendGroupCommandToMember)(JNIEnv *env, jclass clazz, jstring groupI
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
     if (groupId == nullptr) {
         return ILLEGAL_ARGUMENT;
     }
-    const char *temp = env->GetStringUTFChars(groupId, 0);
+    const char *temp = env->GetStringUTFChars(groupId, nullptr);
     string group(temp);
     env->ReleaseStringUTFChars(groupId, temp);
     if (group.empty()) {
@@ -1816,7 +1786,7 @@ JNI_FUNCTION(sendGroupCommandToMember)(JNIEnv *env, jclass clazz, jstring groupI
     }
     string id;
     if (msgId != nullptr) {
-        temp = env->GetStringUTFChars(msgId, 0);
+        temp = env->GetStringUTFChars(msgId, nullptr);
         id = temp;
         env->ReleaseStringUTFChars(msgId, temp);
     }
@@ -1844,7 +1814,7 @@ JNI_FUNCTION(leaveGroup)(JNIEnv *env, jclass clazz, jstring groupUuid)
     if (groupUuid == nullptr)
         return DATA_MISSING;
 
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     string group(temp);
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1861,14 +1831,14 @@ JNI_FUNCTION(removeUser)(JNIEnv *env, jclass clazz, jstring groupUuid, jbyteArra
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char* temp = env->GetStringUTFChars(groupUuid, 0);
+    const char* temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1889,14 +1859,14 @@ JNI_FUNCTION(removeUserFromRemoveUpdate)(JNIEnv *env, jclass clazz, jstring grou
 {
     (void) clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
-    if (groupUuid == NULL)
+    if (groupUuid == nullptr)
         return DATA_MISSING;
 
     string group;
-    const char *temp = env->GetStringUTFChars(groupUuid, 0);
+    const char *temp = env->GetStringUTFChars(groupUuid, nullptr);
     group = temp;
     env->ReleaseStringUTFChars(groupUuid, temp);
 
@@ -1917,13 +1887,13 @@ JNI_FUNCTION(burnGroupMessage)(JNIEnv* env, jclass clazz, jstring groupId, jobje
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return GENERIC_ERROR;
 
     if (groupId == nullptr || messageIds == nullptr || env->GetArrayLength(messageIds) < 1)
         return DATA_MISSING;
 
-    const char* temp = env->GetStringUTFChars(groupId, 0);
+    const char* temp = env->GetStringUTFChars(groupId, nullptr);
     string group(temp);
     env->ReleaseStringUTFChars(groupId, temp);
 
@@ -1931,9 +1901,9 @@ JNI_FUNCTION(burnGroupMessage)(JNIEnv* env, jclass clazz, jstring groupId, jobje
     vector<string> msgIds(static_cast<size_t>(elements));
 
     for (jsize i = 0; i < elements; i++) {
-        jstring msgId = (jstring)env->GetObjectArrayElement(messageIds, i);
+        auto msgId = (jstring)env->GetObjectArrayElement(messageIds, i);
 
-        temp = env->GetStringUTFChars(msgId, 0);
+        temp = env->GetStringUTFChars(msgId, nullptr);
         string id(temp);
         env->ReleaseStringUTFChars(msgId, temp);
         msgIds.push_back(id);
@@ -1952,7 +1922,7 @@ JNI_FUNCTION(burnGroupMessage)(JNIEnv* env, jclass clazz, jstring groupId, jobje
  * *************************************************************
  */
 
-static AppRepository* appRepository = NULL;
+static AppRepository* appRepository = nullptr;
 
 
 /*
@@ -1966,14 +1936,14 @@ JNI_FUNCTION(repoOpenDatabase) (JNIEnv* env, jclass clazz, jstring dbName, jbyte
     (void)clazz;
 
     string nameString;
-    if (dbName != NULL) {
-        const char* name = env->GetStringUTFChars(dbName, 0);
+    if (dbName != nullptr) {
+        const char* name = env->GetStringUTFChars(dbName, nullptr);
         nameString = name;
         env->ReleaseStringUTFChars(dbName, name);
     }
-    const uint8_t* pw = (uint8_t*)env->GetByteArrayElements(keyData, 0);
-    size_t pwLen = static_cast<size_t>(env->GetArrayLength(keyData));
-    if (pw == NULL)
+    const uint8_t* pw = (uint8_t*)env->GetByteArrayElements(keyData, nullptr);
+    auto pwLen = static_cast<size_t>(env->GetArrayLength(keyData));
+    if (pw == nullptr)
         return -2;
     if (pwLen != 32)
         return -3;
@@ -2002,12 +1972,12 @@ JNI_FUNCTION(repoCloseDatabase) (JNIEnv* env, jclass clazz) {
     (void)clazz;
     (void)env;
 
-    if (appRepository != NULL)
+    if (appRepository != nullptr)
         AppRepository::closeStore();
-    appRepository = NULL;
+    appRepository = nullptr;
 }
 
-#define IS_APP_REPO_OPEN    (appRepository != NULL && appRepository->isReady())
+#define IS_APP_REPO_OPEN    (appRepository != nullptr && appRepository->isReady())
 /*
  * Class:     zina_ZinaNative
  * Method:    repoIsOpen
@@ -2077,22 +2047,22 @@ JNI_FUNCTION(loadConversation) (JNIEnv* env, jclass clazz, jbyteArray inName, ji
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     string name;
     if (!arrayToString(env, inName, &name)) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
 
     string data;
     int32_t result = appRepository->loadConversation(name, &data);
     if (SQL_FAIL(result)) {
         setReturnCode(env, code, result);
-        return NULL;
+        return nullptr;
     }
 
     setReturnCode(env, code, result);
@@ -2131,15 +2101,15 @@ JNI_FUNCTION(listConversations) (JNIEnv* env, jclass clazz)
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
     list<string>* convNames = appRepository->listConversations();
 
-    if (convNames == NULL)
-        return NULL;
+    if (convNames == nullptr)
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(convNames->size()), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(convNames->size()), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (; !convNames->empty(); convNames->pop_front()) {
@@ -2188,27 +2158,27 @@ JNI_FUNCTION(loadEvent) (JNIEnv* env, jclass clazz, jbyteArray inName, jbyteArra
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 2)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 2)
+        return nullptr;
 
     string name;
     if (!arrayToString(env, inName, &name)) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     string id;
     if (!arrayToString(env, eventId, &id)) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     int32_t msgNumber = 0;
     string data;
     int32_t result = appRepository->loadEvent(name, id, &data, &msgNumber);
     if (SQL_FAIL(result)) {
         setReturnCode(env, code, result);
-        return NULL;
+        return nullptr;
     }
     setReturnCode(env, code, result, msgNumber);
     jbyteArray retData = stringToArray(env, data);
@@ -2226,21 +2196,21 @@ JNI_FUNCTION(loadEventWithMsgId) (JNIEnv* env, jclass clazz, jbyteArray eventId,
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     string id;
     if (!arrayToString(env, eventId, &id)) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     string data;
     int32_t result = appRepository->loadEventWithMsgId(id, &data);
     if (SQL_FAIL(result)) {
         setReturnCode(env, code, result);
-        return NULL;
+        return nullptr;
     }
     setReturnCode(env, code, result);
     jbyteArray retData = stringToArray(env, data);
@@ -2284,15 +2254,15 @@ JNI_FUNCTION(loadEvents) (JNIEnv* env, jclass clazz, jbyteArray inName, jint off
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 2)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 2)
+        return nullptr;
 
     string name;
     if (!arrayToString(env, inName, &name)) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
 
     int32_t msgNumber = 0;
@@ -2306,10 +2276,10 @@ JNI_FUNCTION(loadEvents) (JNIEnv* env, jclass clazz, jbyteArray inName, jint off
             events.pop_front();
             delete s;
         }
-        return NULL;
+        return nullptr;
     }
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(events.size()), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(events.size()), byteArrayClass, nullptr);
 
     int32_t index = 0;
     while (!events.empty()) {
@@ -2417,30 +2387,30 @@ JNI_FUNCTION(loadObject) (JNIEnv* env, jclass clazz, jbyteArray inName, jbyteArr
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     string name;
     if (!arrayToString(env, inName, &name) || name.empty()) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     string event;
     if (!arrayToString(env, eventId, &event) || event.empty()) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     string id;
     if (!arrayToString(env, objId, &id) || id.empty()) {
-        return NULL;
+        return nullptr;
     }
     string data;
     int32_t result = appRepository->loadObject(name, event, id, &data);
     if (SQL_FAIL(result)) {
         setReturnCode(env, code, result);
-        return NULL;
+        return nullptr;
     }
     setReturnCode(env, code, result);
     jbyteArray retData = stringToArray(env, data);
@@ -2486,20 +2456,20 @@ JNI_FUNCTION(loadObjects) (JNIEnv* env, jclass clazz, jbyteArray inName, jbyteAr
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     string name;
     if (!arrayToString(env, inName, &name) || name.empty()) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     string event;
     if (!arrayToString(env, eventId, &event) || event.empty()) {
         setReturnCode(env, code, -1);
-        return NULL;
+        return nullptr;
     }
     list<string*> objects;
     int32_t result = appRepository->loadObjects(name, event, &objects);
@@ -2511,10 +2481,10 @@ JNI_FUNCTION(loadObjects) (JNIEnv* env, jclass clazz, jbyteArray inName, jbyteAr
             objects.pop_front();
             delete s;
         }
-        return NULL;
+        return nullptr;
     }
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(objects.size()), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(objects.size()), byteArrayClass, nullptr);
 
     int32_t index = 0;
     while (!objects.empty()) {
@@ -2575,7 +2545,7 @@ JNI_FUNCTION(storeAttachmentStatus) (JNIEnv* env, jclass clazz, jbyteArray msgId
         return 1;    // 1 is the generic SQL error code
     }
     string pn;
-    if (partnerName != NULL) {
+    if (partnerName != nullptr) {
         arrayToString(env, partnerName, &pn);
     }
     return appRepository->storeAttachmentStatus(messageId, pn, status);
@@ -2599,7 +2569,7 @@ JNI_FUNCTION(deleteAttachmentStatus) (JNIEnv* env, jclass clazz, jbyteArray msgI
         return 1;    // 1 is the generic SQL error code
     }
     string pn;
-    if (partnerName != NULL) {
+    if (partnerName != nullptr) {
         arrayToString(env, partnerName, &pn);
     }
     return appRepository->deleteAttachmentStatus(messageId, pn);
@@ -2635,7 +2605,7 @@ JNI_FUNCTION(loadAttachmentStatus) (JNIEnv* env, jclass clazz, jbyteArray msgId,
     if (!IS_APP_REPO_OPEN)
         return -1;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
+    if (code == nullptr || env->GetArrayLength(code) < 1)
         return -1;
 
     string messageId;
@@ -2644,7 +2614,7 @@ JNI_FUNCTION(loadAttachmentStatus) (JNIEnv* env, jclass clazz, jbyteArray msgId,
         return -1;
     }
     string pn;
-    if (partnerName != NULL) {
+    if (partnerName != nullptr) {
         arrayToString(env, partnerName, &pn);
     }
     int32_t status;
@@ -2664,16 +2634,16 @@ JNI_FUNCTION(loadMsgsIdsWithAttachmentStatus) (JNIEnv* env, jclass clazz, jint s
     (void)clazz;
 
     if (!IS_APP_REPO_OPEN)
-        return NULL;
+        return nullptr;
 
-    if (code == NULL || env->GetArrayLength(code) < 1)
-        return NULL;
+    if (code == nullptr || env->GetArrayLength(code) < 1)
+        return nullptr;
 
     list<string> msgIds;
     int32_t result = appRepository->loadMsgsIdsWithAttachmentStatus(status, &msgIds);
 
     jclass stringArrayClass = env->FindClass("java/lang/String");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(msgIds.size()), stringArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(msgIds.size()), stringArrayClass, nullptr);
 
     int32_t index = 0;
     for (; !msgIds.empty(); msgIds.pop_front()) {
@@ -2690,21 +2660,21 @@ JNI_FUNCTION(loadMsgsIdsWithAttachmentStatus) (JNIEnv* env, jclass clazz, jint s
 static uint8_t* jarrayToCarray(JNIEnv* env, jbyteArray array, size_t* len)
 {
     *len = 0;
-    if (array == NULL)
-        return NULL;
+    if (array == nullptr)
+        return nullptr;
 
     int tmpLen = env->GetArrayLength(array);
     if (tmpLen <= 0)
-        return NULL;
+        return nullptr;
 
-    size_t dataLen = static_cast<size_t>(tmpLen);
-    const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(array, 0);
-    if (tmp == NULL)
-        return NULL;
+    auto dataLen = static_cast<size_t>(tmpLen);
+    const uint8_t* tmp = (uint8_t*)env->GetByteArrayElements(array, nullptr);
+    if (tmp == nullptr)
+        return nullptr;
 
-    uint8_t* buffer = (uint8_t*)malloc(dataLen);
-    if (buffer == NULL)
-        return NULL;
+    auto buffer = (uint8_t*)malloc(dataLen);
+    if (buffer == nullptr)
+        return nullptr;
 
     *len = dataLen;
     memcpy(buffer, tmp, dataLen);
@@ -2735,24 +2705,23 @@ JNI_FUNCTION(cloudEncryptNew) (JNIEnv* env, jclass clazz, jbyteArray context, jb
 
     size_t dataLen;
     uint8_t* inData = jarrayToCarray(env, data, &dataLen);
-    if (inData == NULL || dataLen == 0) {
+    if (inData == nullptr || dataLen == 0) {
         setReturnCode(env, code, kSCLError_BadParams);
         return 0L;
     }
     size_t metaLen;
     uint8_t* inMetaData = jarrayToCarray(env, metaData, &metaLen);
-    if (inMetaData == NULL || metaLen == 0) {
+    if (inMetaData == nullptr || metaLen == 0) {
         setReturnCode(env, code, kSCLError_BadParams);
         return 0L;
     }
     SCLError err = SCloudEncryptNew(ctx, ctxLen, (void*)inData, dataLen, (void*)inMetaData, metaLen,
-                                    NULL, NULL, &scCtxEnc);
+                                    nullptr, nullptr, &scCtxEnc);
     if (err != kSCLError_NoErr) {
         setReturnCode(env, code, err);
         return 0L;
     }
-    jlong retval = (jlong)scCtxEnc;
-    return retval;
+    return (jlong)scCtxEnc;
 }
 
 /*
@@ -2766,7 +2735,7 @@ JNI_FUNCTION(cloudCalculateKey) (JNIEnv* env, jclass clazz, jlong cloudRef)
     (void)clazz;
     (void)env;
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     SCLError err = SCloudCalculateKey(scCtxEnc, 0);
     return err;
@@ -2775,11 +2744,11 @@ JNI_FUNCTION(cloudCalculateKey) (JNIEnv* env, jclass clazz, jlong cloudRef)
 static jbyteArray cArrayToJArray(JNIEnv* env, const uint8_t* input, size_t len)
 {
     if (len == 0)
-        return NULL;
+        return nullptr;
 
     jbyteArray data = env->NewByteArray(static_cast<jsize>(len));
-    if (data == NULL)
-        return NULL;
+    if (data == nullptr)
+        return nullptr;
     env->SetByteArrayRegion(data, 0, static_cast<jsize>(len), (jbyte*)input);
     return data;
 }
@@ -2795,20 +2764,20 @@ JNI_FUNCTION(cloudEncryptGetKeyBLOB) (JNIEnv* env, jclass clazz, jlong cloudRef,
     (void)clazz;
 
     SCLError err;
-    uint8_t* blob = NULL;
+    uint8_t* blob = nullptr;
     size_t blobSize = 0;
 
     setReturnCode(env, code, kSCLError_NoErr);
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     err = SCloudEncryptGetKeyBLOB( scCtxEnc, &blob, &blobSize);
 
     if (err != kSCLError_NoErr) {
         setReturnCode(env, code, err);
-        if (blob != NULL)
+        if (blob != nullptr)
             free(blob);
-        return NULL;
+        return nullptr;
     }
     jbyteArray retval = cArrayToJArray(env, blob, blobSize);
     free(blob);
@@ -2826,20 +2795,20 @@ JNI_FUNCTION(cloudEncryptGetSegmentBLOB) (JNIEnv* env, jclass clazz, jlong cloud
     (void)clazz;
 
     SCLError err;
-    uint8_t* blob = NULL;
+    uint8_t* blob = nullptr;
     size_t blobSize = 0;
 
     setReturnCode(env, code, kSCLError_NoErr);
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     err = SCloudEncryptGetSegmentBLOB(scCtxEnc, segNum, &blob, &blobSize);
 
     if (err != kSCLError_NoErr) {
         setReturnCode(env, code, err);
-        if (blob != NULL)
+        if (blob != nullptr)
             free(blob);
-        return NULL;
+        return nullptr;
     }
     jbyteArray retval = cArrayToJArray(env, blob, blobSize);
     free(blob);
@@ -2862,12 +2831,12 @@ JNI_FUNCTION(cloudEncryptGetLocator) (JNIEnv* env, jclass clazz, jlong cloudRef,
 
     setReturnCode(env, code, kSCLError_NoErr);
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     err = SCloudEncryptGetLocator(scCtxEnc, buffer, &bufSize);
     if (err != kSCLError_NoErr) {
         setReturnCode(env, code, err);
-        return NULL;
+        return nullptr;
     }
     jbyteArray retval = cArrayToJArray(env, buffer, bufSize);
     return retval;
@@ -2889,12 +2858,12 @@ JNI_FUNCTION(cloudEncryptGetLocatorREST) (JNIEnv* env, jclass clazz, jlong cloud
 
     setReturnCode(env, code, kSCLError_NoErr);
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     err = SCloudEncryptGetLocatorREST(scCtxEnc, buffer, &bufSize);
     if (err != kSCLError_NoErr) {
         setReturnCode(env, code, err);
-        return NULL;
+        return nullptr;
     }
     jbyteArray retval = cArrayToJArray(env, buffer, bufSize);
     return retval;
@@ -2912,16 +2881,16 @@ JNI_FUNCTION(cloudEncryptNext) (JNIEnv* env, jclass clazz, jlong cloudRef, jintA
 
     SCLError err;
 
-    SCloudContextRef scCtxEnc = (SCloudContextRef)cloudRef;
+    auto scCtxEnc = (SCloudContextRef)cloudRef;
 
     size_t required = SCloudEncryptBufferSize(scCtxEnc);
     jbyteArray data = env->NewByteArray(static_cast<jsize>(required));
-    if (data == NULL) {
+    if (data == nullptr) {
         setReturnCode(env, code, kSCLError_OutOfMemory);
-        return NULL;
+        return nullptr;
     }
 
-    uint8_t* bigBuffer = (uint8_t*)env->GetByteArrayElements(data, 0);
+    auto bigBuffer = (uint8_t*)env->GetByteArrayElements(data, nullptr);
     err = SCloudEncryptNext(scCtxEnc, bigBuffer, &required);
     setReturnCode(env, code, err);
 
@@ -2946,9 +2915,8 @@ JNI_FUNCTION(cloudDecryptNew) (JNIEnv* env, jclass clazz, jbyteArray key, jintAr
     if (!arrayToString(env, key, &keyIn))
         return 0L;
 
-    SCloudDecryptNew((uint8_t*)keyIn.data(), keyIn.size(), NULL, NULL, &scCtxDec);
-    jlong retval = (jlong)scCtxDec;
-    return retval;
+    SCloudDecryptNew((uint8_t*)keyIn.data(), keyIn.size(), nullptr, nullptr, &scCtxDec);
+    return (jlong)scCtxDec;
 }
 
 /*
@@ -2962,15 +2930,15 @@ JNI_FUNCTION(cloudDecryptNext) (JNIEnv* env, jclass clazz, jlong cloudRef, jbyte
     (void)clazz;
 
     SCLError err;
-    SCloudContextRef scCtxDec = (SCloudContextRef)cloudRef;
+    auto scCtxDec = (SCloudContextRef)cloudRef;
 
     int tmpLen = env->GetArrayLength(in);
     if (tmpLen <= 0)
         return kSCLError_BadParams;
 
-    size_t dataLen = static_cast<size_t>(tmpLen);
-    uint8_t* data = (uint8_t*)env->GetByteArrayElements(in, 0);
-    if (data == NULL) {
+    auto dataLen = static_cast<size_t>(tmpLen);
+    auto data = (uint8_t*)env->GetByteArrayElements(in, nullptr);
+    if (data == nullptr) {
         return kSCLError_OutOfMemory;
     }
     err = SCloudDecryptNext(scCtxDec, data, dataLen);
@@ -2988,10 +2956,10 @@ JNI_FUNCTION(cloudGetDecryptedData) (JNIEnv* env, jclass clazz, jlong cloudRef)
 {
     (void)clazz;
 
-    SCloudContextRef scCtxDec = (SCloudContextRef)cloudRef;
+    auto scCtxDec = (SCloudContextRef)cloudRef;
 
-    uint8_t* dataBuffer = NULL;
-    uint8_t* metaBuffer = NULL;
+    uint8_t* dataBuffer = nullptr;
+    uint8_t* metaBuffer = nullptr;
     size_t dataLen;
     size_t metaLen;
 
@@ -3011,10 +2979,10 @@ JNI_FUNCTION(cloudGetDecryptedMetaData) (JNIEnv* env, jclass clazz, jlong cloudR
 {
     (void)clazz;
 
-    SCloudContextRef scCtxDec = (SCloudContextRef)cloudRef;
+    auto scCtxDec = (SCloudContextRef)cloudRef;
 
-    uint8_t* dataBuffer = NULL;
-    uint8_t* metaBuffer = NULL;
+    uint8_t* dataBuffer = nullptr;
+    uint8_t* metaBuffer = nullptr;
     size_t dataLen;
     size_t metaLen;
 
@@ -3035,7 +3003,7 @@ JNI_FUNCTION(cloudFree) (JNIEnv* env, jclass clazz, jlong cloudRef)
     (void)clazz;
     (void)env;
 
-    SCloudContextRef scCtx = (SCloudContextRef)cloudRef;
+    auto scCtx = (SCloudContextRef)cloudRef;
     SCloudFree(scCtx, 1);
 }
 
@@ -3051,81 +3019,78 @@ JNI_FUNCTION(getUid)(JNIEnv* env, jclass clazz, jstring alias, jbyteArray author
 
     string auth;
     if (!arrayToString(env, authorization, &auth) || auth.empty()) {
-        if (zinaAppInterface == NULL)
-            return NULL;
+        if (zinaAppInterface == nullptr)
+            return nullptr;
         auth = zinaAppInterface->getOwnAuthrization();
     }
-    if (alias == NULL) {
-        return NULL;
+    if (alias == nullptr) {
+        return nullptr;
     }
-    const char* aliasTmp = env->GetStringUTFChars(alias, 0);
+    const char* aliasTmp = env->GetStringUTFChars(alias, nullptr);
     string aliasString(aliasTmp);
     env->ReleaseStringUTFChars(alias, aliasTmp);
     if (aliasString.empty())
-        return NULL;
+        return nullptr;
 
     NameLookup* nameCache = NameLookup::getInstance();
     string uid = nameCache->getUid(aliasString, auth);
 
     if (uid.empty())
-        return NULL;
+        return nullptr;
 
     jstring uidJava = env->NewStringUTF(uid.c_str());
     return uidJava;
 }
 
-static string  createUserInfoJson(shared_ptr<UserInfo> userInfo)
+static string createUserInfoJson(shared_ptr<UserInfo> userInfo)
 {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "uid", userInfo->uniqueId.c_str());
-    cJSON_AddStringToObject(root, "display_name", userInfo->displayName.c_str());
-    cJSON_AddStringToObject(root, "alias0", userInfo->alias0.c_str());
-    cJSON_AddStringToObject(root, "lookup_uri", userInfo->contactLookupUri.c_str());
-    cJSON_AddStringToObject(root, "avatar_url", userInfo->avatarUrl.c_str());
-    cJSON_AddStringToObject(root, "display_organization", userInfo->organization.c_str());
-    cJSON_AddBoolToObject(root, "same_organization", userInfo->inSameOrganization);
-    cJSON_AddStringToObject(root, RETENTION_ORG, userInfo->retainForOrg.c_str());
-    cJSON_AddBoolToObject(root, "dr_enabled", userInfo->drEnabled);
+    json jsn;
+    jsn["uid"] = userInfo->uniqueId;
+    jsn["display_name"] = userInfo->displayName;
+    jsn["alias0"] = userInfo->alias0;
+    jsn["lookup_uri"] = userInfo->contactLookupUri;
+    jsn["avatar_url"] = userInfo->avatarUrl;
+    jsn["display_organization"] = userInfo->organization;
+    jsn["same_organization"] = userInfo->inSameOrganization;
+    jsn[RETENTION_ORG] = userInfo->retainForOrg;
+    jsn["dr_enabled"] = userInfo->drEnabled;
 
-    cJSON_AddBoolToObject(root, RRMM, userInfo->drRrmm);
-    cJSON_AddBoolToObject(root, RRMP, userInfo->drRrmp);
-    cJSON_AddBoolToObject(root, RRCM, userInfo->drRrcm);
-    cJSON_AddBoolToObject(root, RRCP, userInfo->drRrcp);
-    cJSON_AddBoolToObject(root, RRAP, userInfo->drRrap);
+    jsn[RRMM] = userInfo->drRrmm;
+    jsn[RRMP] = userInfo->drRrmp;
+    jsn[RRCM] = userInfo->drRrcm;
+    jsn[RRCP] = userInfo->drRrcp;
+    jsn[RRAP] = userInfo->drRrap;
 
-    char *out = cJSON_PrintUnformatted(root);
-    string json(out);
-    cJSON_Delete(root); free(out);
-    return json;
+    return jsn.dump();
 }
 
 static jbyteArray getUserInfoInternal(JNIEnv* env, jstring alias, jbyteArray authorization, bool cacheOnly, int32_t* errorCode)
 {
     string auth;
     if (!arrayToString(env, authorization, &auth) || auth.empty()) {
-        if (zinaAppInterface == NULL) {
+        if (zinaAppInterface == nullptr) {
             *errorCode = GENERIC_ERROR;
-            return NULL;
+            return nullptr;
         }
         auth = zinaAppInterface->getOwnAuthrization();
     }
-    if (alias == NULL) {
+    if (alias == nullptr) {
         *errorCode = GENERIC_ERROR;
-        return NULL;
+        return nullptr;
     }
-    const char* aliasTmp = env->GetStringUTFChars(alias, 0);
+    const char* aliasTmp = env->GetStringUTFChars(alias, nullptr);
     string aliasString(aliasTmp);
     env->ReleaseStringUTFChars(alias, aliasTmp);
     if (aliasString.empty()) {
         *errorCode = GENERIC_ERROR;
-        return NULL;
+        return nullptr;
     }
 
     NameLookup* nameCache = NameLookup::getInstance();
     shared_ptr<UserInfo> userInfo = nameCache->getUserInfo(aliasString, auth, cacheOnly, errorCode);
 
     if (!userInfo)
-        return NULL;
+        return nullptr;
 
     jbyteArray retData = stringToArray(env, createUserInfoJson(userInfo));
     return retData;
@@ -3144,7 +3109,7 @@ JNI_FUNCTION(getUserInfo)(JNIEnv* env, jclass clazz, jstring alias, jbyteArray a
 
     jbyteArray retData = getUserInfoInternal(env, alias, authorization, false, &errorCode);
 
-    if (code != NULL && env->GetArrayLength(code) >= 1) {
+    if (code != nullptr && env->GetArrayLength(code) >= 1) {
         setReturnCode(env, code, errorCode);
     }
     return retData;
@@ -3160,7 +3125,7 @@ JNI_FUNCTION(getUserInfoFromCache)(JNIEnv* env, jclass clazz, jstring alias)
 {
     (void)clazz;
     int32_t errorCode = 0;
-    return getUserInfoInternal(env, alias, NULL, true, &errorCode);
+    return getUserInfoInternal(env, alias, nullptr, true, &errorCode);
 }
 
 /*
@@ -3175,24 +3140,24 @@ JNICALL JNI_FUNCTION(refreshUserData)(JNIEnv* env, jclass clazz, jstring alias, 
 
     string auth;
     if (!arrayToString(env, authorization, &auth) || auth.empty()) {
-        if (zinaAppInterface == NULL)
-            return NULL;
+        if (zinaAppInterface == nullptr)
+            return nullptr;
         auth = zinaAppInterface->getOwnAuthrization();
     }
-    if (alias == NULL) {
-        return NULL;
+    if (alias == nullptr) {
+        return nullptr;
     }
-    const char* aliasTmp = env->GetStringUTFChars(alias, 0);
+    const char* aliasTmp = env->GetStringUTFChars(alias, nullptr);
     string aliasString(aliasTmp);
     env->ReleaseStringUTFChars(alias, aliasTmp);
     if (aliasString.empty())
-        return NULL;
+        return nullptr;
 
     NameLookup* nameCache = NameLookup::getInstance();
     shared_ptr<UserInfo> userInfo = nameCache->refreshUserData(aliasString, auth);
 
     if (!userInfo)
-        return NULL;
+        return nullptr;
 
     jbyteArray retData = stringToArray(env, createUserInfoJson(userInfo));
     return retData;
@@ -3201,18 +3166,20 @@ JNICALL JNI_FUNCTION(refreshUserData)(JNIEnv* env, jclass clazz, jstring alias, 
 JNIEXPORT void JNICALL
 JNI_FUNCTION(setUserInfo)(JNIEnv* env, jclass clazz, jstring uuid, jstring info)
 {
-    if (uuid == NULL) {
+    (void)clazz;
+
+    if (uuid == nullptr) {
         return;
     }
 
-    const char* uuidTmp = env->GetStringUTFChars(uuid, 0);
+    const char* uuidTmp = env->GetStringUTFChars(uuid, nullptr);
     string uuidString(uuidTmp);
     env->ReleaseStringUTFChars(uuid, uuidTmp);
     if (uuidString.empty()) {
         return;
     }
 
-    const char* infoTmp = env->GetStringUTFChars(info, 0);
+    const char* infoTmp = env->GetStringUTFChars(info, nullptr);
     string infoString(infoTmp);
     env->ReleaseStringUTFChars(info, infoTmp);
     if (infoString.empty()) {
@@ -3226,11 +3193,13 @@ JNI_FUNCTION(setUserInfo)(JNIEnv* env, jclass clazz, jstring uuid, jstring info)
 JNIEXPORT jboolean JNICALL
 JNI_FUNCTION(isUserInfoAvailable)(JNIEnv* env, jclass clazz, jstring uuid)
 {
-    if (uuid == NULL) {
+    (void)clazz;
+
+    if (uuid == nullptr) {
         return static_cast<jboolean>(false);
     }
 
-    const char* uuidTmp = env->GetStringUTFChars(uuid, 0);
+    const char* uuidTmp = env->GetStringUTFChars(uuid, nullptr);
     string uuidString(uuidTmp);
     env->ReleaseStringUTFChars(uuid, uuidTmp);
     if (uuidString.empty()) {
@@ -3244,8 +3213,10 @@ JNI_FUNCTION(isUserInfoAvailable)(JNIEnv* env, jclass clazz, jstring uuid)
 JNIEXPORT jobject JNICALL
 JNI_FUNCTION(getUnknownUsers)(JNIEnv* env, jclass clazz, jobject requestedUuids)
 {
-    if (requestedUuids == NULL) {
-       return NULL;
+    (void)clazz;
+
+    if (requestedUuids == nullptr) {
+       return nullptr;
     }
 
     jclass listClass = env->FindClass("java/util/List");
@@ -3256,16 +3227,16 @@ JNI_FUNCTION(getUnknownUsers)(JNIEnv* env, jclass clazz, jobject requestedUuids)
     jmethodID arrayListClassInit = env->GetMethodID(arrayListClass, "<init>", "(I)V");
     jmethodID arrayListClassAdd = env->GetMethodID(arrayListClass, "add", "(Ljava/lang/Object;)Z");
 
-    if (listClassSize == NULL || listClassGet == NULL || arrayListClassInit == NULL || arrayListClassAdd == NULL) {
+    if (listClassSize == nullptr || listClassGet == nullptr || arrayListClassInit == nullptr || arrayListClassAdd == nullptr) {
         Log("Could not resolve methods for list class");
-        return NULL;
+        return nullptr;
     }
 
     list<string> requestedUuidList;
     int aliasCount = static_cast<int>(env->CallIntMethod(requestedUuids, listClassSize));
     for (int i = 0; i < aliasCount; i++) {
-        jstring uuidJString = (jstring) env->CallObjectMethod(requestedUuids, listClassGet, i);
-        const char *uuidString = env->GetStringUTFChars(uuidJString, 0);
+        auto uuidJString = (jstring) env->CallObjectMethod(requestedUuids, listClassGet, i);
+        const char *uuidString = env->GetStringUTFChars(uuidJString, nullptr);
         string uuid(uuidString);
         requestedUuidList.push_back(uuid);
         env->ReleaseStringUTFChars(uuidJString, uuidString);
@@ -3274,17 +3245,15 @@ JNI_FUNCTION(getUnknownUsers)(JNIEnv* env, jclass clazz, jobject requestedUuids)
     NameLookup* nameCache = NameLookup::getInstance();
     shared_ptr<list<string> > unknownUuids = nameCache->getUnknownUsers(requestedUuidList);
     if (!unknownUuids) {
-        return NULL;
+        return nullptr;
     }
     size_t size = unknownUuids->size();
     if (size == 0) {
-        return NULL;
+        return nullptr;
     }
 
-    jclass stringArrayClass = env->FindClass("java/lang/String");
     jobject retArray = env->NewObject(arrayListClass, arrayListClassInit, static_cast<jsize>(size));
 
-    int32_t index = 0;
     for (; !unknownUuids->empty(); unknownUuids->pop_front()) {
         const string& uuid = unknownUuids->front();
         jstring uuidJString = env->NewStringUTF(uuid.c_str());
@@ -3304,25 +3273,25 @@ JNI_FUNCTION(getAliases)(JNIEnv* env, jclass clazz, jstring uuid)
 {
     (void)clazz;
 
-    if (uuid == NULL) {
-        return NULL;
+    if (uuid == nullptr) {
+        return nullptr;
     }
-    const char* uuidTemp = env->GetStringUTFChars(uuid, 0);
+    const char* uuidTemp = env->GetStringUTFChars(uuid, nullptr);
     string uuidString(uuidTemp);
     env->ReleaseStringUTFChars(uuid, uuidTemp);
     if (uuidString.empty())
-        return NULL;
+        return nullptr;
 
     NameLookup* nameCache = NameLookup::getInstance();
     shared_ptr<list<string> > aliases = nameCache->getAliases(uuidString);
     if (!aliases)
-        return NULL;
+        return nullptr;
     size_t size = aliases->size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(size), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (; !aliases->empty(); aliases->pop_front()) {
@@ -3345,19 +3314,19 @@ JNI_FUNCTION(addAliasToUuid)(JNIEnv* env, jclass clazz, jstring alias, jstring u
 {
     (void)clazz;
 
-    if (uuid == NULL) {
+    if (uuid == nullptr) {
         return NameLookup::MissingParameter;
     }
-    const char* uuidTemp = env->GetStringUTFChars(uuid, 0);
+    const char* uuidTemp = env->GetStringUTFChars(uuid, nullptr);
     string uuidString(uuidTemp);
     env->ReleaseStringUTFChars(uuid, uuidTemp);
     if (uuidString.empty())
         return NameLookup::MissingParameter;
 
-    if (alias == NULL) {
+    if (alias == nullptr) {
         return NameLookup::MissingParameter;
     }
-    const char* aliasTmp = env->GetStringUTFChars(alias, 0);
+    const char* aliasTmp = env->GetStringUTFChars(alias, nullptr);
     string aliasString(aliasTmp);
     env->ReleaseStringUTFChars(alias, aliasTmp);
     if (aliasString.empty())
@@ -3382,19 +3351,19 @@ JNI_FUNCTION(getDisplayName)(JNIEnv* env, jclass clazz, jstring uuid)
 {
     (void)clazz;
 
-    if (uuid == NULL) {
-        return NULL;
+    if (uuid == nullptr) {
+        return nullptr;
     }
-    const char* uuidTemp = env->GetStringUTFChars(uuid, 0);
+    const char* uuidTemp = env->GetStringUTFChars(uuid, nullptr);
     string uuidString(uuidTemp);
     env->ReleaseStringUTFChars(uuid, uuidTemp);
     if (uuidString.empty())
-        return NULL;
+        return nullptr;
 
     NameLookup* nameCache = NameLookup::getInstance();
     shared_ptr<string> displayName = nameCache->getDisplayName(uuidString);
     if (!displayName)
-        return NULL;
+        return nullptr;
     jbyteArray retData = stringToArray(env, *displayName);
     return retData;
 }
@@ -3409,11 +3378,11 @@ JNI_FUNCTION(loadCapturedMsgs)(JNIEnv* env, jclass clazz, jbyteArray name, jbyte
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL) {
-        if (code != NULL && env->GetArrayLength(code) >= 1) {
+    if (zinaAppInterface == nullptr) {
+        if (code != nullptr && env->GetArrayLength(code) >= 1) {
             setReturnCode(env, code, GENERIC_ERROR);
         }
-        return NULL;
+        return nullptr;
     }
 
     string nameString;
@@ -3429,11 +3398,11 @@ JNI_FUNCTION(loadCapturedMsgs)(JNIEnv* env, jclass clazz, jbyteArray name, jbyte
     list<StringUnique> records;
     int32_t errorCode = store.loadMsgTrace(nameString, msgIdString, devIdString, records);
 
-    if (code != NULL && env->GetArrayLength(code) >= 1) {
+    if (code != nullptr && env->GetArrayLength(code) >= 1) {
         setReturnCode(env, code, errorCode);
     }
     jclass byteArrayClass = env->FindClass("[B");
-    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(records.size()), byteArrayClass, NULL);
+    jobjectArray retArray = env->NewObjectArray(static_cast<jsize>(records.size()), byteArrayClass, nullptr);
 
     int32_t index = 0;
     for (; !records.empty(); records.pop_front()) {
@@ -3455,27 +3424,27 @@ JNI_FUNCTION(sendDrMessageData)(JNIEnv* env, jclass clazz, jstring callid, jstri
 {
     (void)clazz;
 
-    if (callid == NULL || direction == NULL || recipient == NULL || message == NULL) {
+    if (callid == nullptr || direction == nullptr || recipient == nullptr || message == nullptr) {
         return;
     }
 
-    const char* callidTemp = env->GetStringUTFChars(callid, 0);
+    const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
 
-    const char* directionTemp = env->GetStringUTFChars(direction, 0);
+    const char* directionTemp = env->GetStringUTFChars(direction, nullptr);
     string directionString(directionTemp);
     env->ReleaseStringUTFChars(direction, directionTemp);
     if (directionString.empty())
         return;
 
-    const char* recipientTemp = env->GetStringUTFChars(recipient, 0);
+    const char* recipientTemp = env->GetStringUTFChars(recipient, nullptr);
     string recipientString(recipientTemp);
     env->ReleaseStringUTFChars(recipient, recipientTemp);
     if (recipientString.empty())
         return;
 
-    const char* messageTemp = env->GetStringUTFChars(message, 0);
+    const char* messageTemp = env->GetStringUTFChars(message, nullptr);
     string messageString(messageTemp);
     env->ReleaseStringUTFChars(message, messageTemp);
     if (messageString.empty())
@@ -3494,21 +3463,21 @@ JNI_FUNCTION(sendDrMessageMetadata)(JNIEnv* env, jclass clazz, jstring callid, j
 {
     (void)clazz;
 
-    if (callid == NULL || direction == NULL || recipient == NULL) {
+    if (callid == nullptr || direction == nullptr || recipient == nullptr) {
         return;
     }
 
-    const char* callidTemp = env->GetStringUTFChars(callid, 0);
+    const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
 
-    const char* directionTemp = env->GetStringUTFChars(direction, 0);
+    const char* directionTemp = env->GetStringUTFChars(direction, nullptr);
     string directionString(directionTemp);
     env->ReleaseStringUTFChars(direction, directionTemp);
     if (directionString.empty())
         return;
 
-    const char* recipientTemp = env->GetStringUTFChars(recipient, 0);
+    const char* recipientTemp = env->GetStringUTFChars(recipient, nullptr);
     string recipientString(recipientTemp);
     env->ReleaseStringUTFChars(recipient, recipientTemp);
     if (recipientString.empty())
@@ -3527,15 +3496,15 @@ JNI_FUNCTION(sendDrInCircleCallMetadata)(JNIEnv * env, jclass clazz, jstring cal
 {
     (void)clazz;
 
-    if (callid == NULL || recipient == NULL) {
+    if (callid == nullptr || recipient == nullptr) {
         return;
     }
 
-    const char* callidTemp = env->GetStringUTFChars(callid, 0);
+    const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
 
-    const char* recipientTemp = env->GetStringUTFChars(recipient, 0);
+    const char* recipientTemp = env->GetStringUTFChars(recipient, nullptr);
     string recipientString(recipientTemp);
     env->ReleaseStringUTFChars(recipient, recipientTemp);
     if (recipientString.empty())
@@ -3554,21 +3523,21 @@ JNI_FUNCTION(sendDrSilentWorldCallMetadata)(JNIEnv * env, jclass clazz, jstring 
 {
     (void)clazz;
 
-    if (callid == NULL || srcTn == NULL || dstTn == NULL) {
+    if (callid == nullptr || srcTn == nullptr || dstTn == nullptr) {
         return;
     }
 
-    const char* callidTemp = env->GetStringUTFChars(callid, 0);
+    const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
 
-    const char* srcTnTemp = env->GetStringUTFChars(srcTn, 0);
+    const char* srcTnTemp = env->GetStringUTFChars(srcTn, nullptr);
     string srcTnString(srcTnTemp);
     env->ReleaseStringUTFChars(srcTn, srcTnTemp);
     if (srcTnString.empty())
         return;
 
-    const char* dstTnTemp = env->GetStringUTFChars(dstTn, 0);
+    const char* dstTnTemp = env->GetStringUTFChars(dstTn, nullptr);
     string dstTnString(dstTnTemp);
     env->ReleaseStringUTFChars(dstTn, dstTnTemp);
     if (dstTnString.empty())
@@ -3619,7 +3588,7 @@ JNI_FUNCTION(isDrEnabledForUser)(JNIEnv * env, jclass clazz, jstring user)
 
     bool enabled = false;
 
-    const char* userTemp = env->GetStringUTFChars(user, 0);
+    const char* userTemp = env->GetStringUTFChars(user, nullptr);
     string userString(userTemp);
     env->ReleaseStringUTFChars(user, userTemp);
 
@@ -3637,13 +3606,13 @@ JNI_FUNCTION(setDataRetentionFlags)(JNIEnv* env, jclass clazz, jstring flags)
 {
     (void)clazz;
 
-    if (zinaAppInterface == NULL)
+    if (zinaAppInterface == nullptr)
         return -1;
 
     if (flags == nullptr) {
         return DATA_MISSING;
     }
-    const char* flagsTemp = env->GetStringUTFChars(flags, 0);
+    const char* flagsTemp = env->GetStringUTFChars(flags, nullptr);
     string flagsString(flagsTemp);
     env->ReleaseStringUTFChars(flags, flagsTemp);
 

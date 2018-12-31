@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-avoid-goto"
 /*
 Copyright 2017 Silent Circle, LLC
 
@@ -54,11 +56,11 @@ int SQLiteStoreConv::createVectorClockTables()
     sqlite3_stmt* stmt;
     int32_t sqlResult;
 
-    SQLITE_PREPARE(db, dropVectorClocks, -1, &stmt, NULL);
+    SQLITE_PREPARE(db, dropVectorClocks, -1, &stmt, nullptr);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    SQLITE_CHK(SQLITE_PREPARE(db, createVectorClocks, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, createVectorClocks, -1, &stmt, nullptr));
     sqlResult = sqlite3_step(stmt);
     if (sqlResult != SQLITE_DONE) {
         ERRMSG;
@@ -82,7 +84,7 @@ int32_t SQLiteStoreConv::updateVectorClocksDb(int32_t oldVersion)
     LOGGER(DEBUGGING, __func__, " -->");
 
     if (oldVersion == 6) {
-        SQLITE_PREPARE(db, createVectorClocks, -1, &stmt, NULL);
+        SQLITE_PREPARE(db, createVectorClocks, -1, &stmt, nullptr);
         sqlCode_ = sqlite3_step(stmt);
         sqlite3_finalize(stmt);
         if (sqlCode_ != SQLITE_DONE) {
@@ -101,7 +103,7 @@ int32_t SQLiteStoreConv::insertReplaceVectorClock(const string &id, int32_t type
     LOGGER(DEBUGGING, __func__, " --> ");
 
     // char* insertVectorClocksSql = "INSERT OR REPLACE INTO VectorClocks (id, type, data) VALUES (?1, ?2, ?3);";
-    SQLITE_CHK(SQLITE_PREPARE(db, insertVectorClocksSql, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, insertVectorClocksSql, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_text(stmt, 1, id.data(), static_cast<int32_t>(id.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_int(stmt,  2, type));
     SQLITE_CHK(sqlite3_bind_text(stmt, 3, vectorClock.data(), static_cast<int32_t>(vectorClock.size()), SQLITE_STATIC));
@@ -126,7 +128,7 @@ int32_t SQLiteStoreConv::loadVectorClock(const string& id, int32_t type, string 
     LOGGER(DEBUGGING, __func__, " --> ");
 
     // char* selectVectorClocks = "SELECT data FROM VectorClocks WHERE id=?1 AND type=?2;";
-    SQLITE_CHK(SQLITE_PREPARE(db, selectVectorClocks, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, selectVectorClocks, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_text(stmt, 1, id.data(), static_cast<int32_t>(id.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_int(stmt,  2, type));
 
@@ -154,7 +156,7 @@ int32_t SQLiteStoreConv::deleteVectorClock(const string& id, int32_t type)
     LOGGER(DEBUGGING, __func__, " --> ");
 
     // char* removeVectorClock = "DELETE FROM VectorClocks WHERE id=?1 AND type=?2;";
-    SQLITE_CHK(SQLITE_PREPARE(db, removeVectorClock, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, removeVectorClock, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_text(stmt, 1, id.data(), static_cast<int32_t>(id.size()), SQLITE_STATIC));
     SQLITE_CHK(sqlite3_bind_int(stmt,  2, type));
 
@@ -177,7 +179,7 @@ int32_t SQLiteStoreConv::deleteVectorClocks(const string& id)
     LOGGER(DEBUGGING, __func__, " --> ");
 
     // char* removeVectorClocks = "DELETE FROM VectorClocks WHERE id=?1;";
-    SQLITE_CHK(SQLITE_PREPARE(db, removeVectorClocks, -1, &stmt, NULL));
+    SQLITE_CHK(SQLITE_PREPARE(db, removeVectorClocks, -1, &stmt, nullptr));
     SQLITE_CHK(sqlite3_bind_text(stmt, 1, id.data(), static_cast<int32_t>(id.size()), SQLITE_STATIC));
 
     sqlResult = sqlite3_step(stmt);
@@ -191,3 +193,5 @@ cleanup:
     LOGGER(DEBUGGING, __func__, " <-- ", sqlResult);
     return sqlResult;
 }
+
+#pragma clang diagnostic pop
