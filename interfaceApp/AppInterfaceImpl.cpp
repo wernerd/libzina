@@ -226,7 +226,7 @@ int32_t AppInterfaceImpl::getNumPreKeys() const
     return Provisioning::getNumPreKeys(scClientDevId_, authorization_);
 }
 
-// Get known Axolotl device from provisioning server, check if we have a new one
+// Get known Zina device from provisioning server, check if we have a new one
 // and if yes send a "ping" message to the new devices to create an Axolotl conversation
 // for the new devices. The real implementation is in the command handling function below.
 

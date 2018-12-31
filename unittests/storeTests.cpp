@@ -53,7 +53,7 @@ static string* preKeyJson(const DhKeyPair& preKeyPair)
     cJSON_AddStringToObject(root, "public", b64Buffer);
 
     char *out = cJSON_Print(root);
-    std::string* data = new std::string(out);
+    auto* data = new std::string(out);
 //    cerr << "PreKey data to store: " << *data << endl;
     cJSON_Delete(root); free(out);
 
@@ -62,11 +62,11 @@ static string* preKeyJson(const DhKeyPair& preKeyPair)
 
 class StoreTestFixture: public ::testing::Test {
 public:
-    StoreTestFixture( ) {
+    StoreTestFixture()  {
         // initialization code here
     }
 
-    void SetUp() {
+    void SetUp() override {
         // code here will execute just before the test ensues
         LOGGER_INSTANCE setLogLevel(ERROR);
         pks = SQLiteStoreConv::getStore();
@@ -74,19 +74,19 @@ public:
         pks->openStore(std::string());
     }
 
-    void TearDown( ) {
+    void TearDown() override {
         // code here will be called just after the test completes
         // ok to through exceptions from here if need be
         SQLiteStoreConv::closeStore();
     }
 
-    ~StoreTestFixture( )  {
+    ~StoreTestFixture() override {
         // cleanup any pending stuff, but no exceptions allowed
         LOGGER_INSTANCE setLogLevel(VERBOSE);
     }
 
     // put in any custom data members that you need
-    SQLiteStoreConv* pks;
+    SQLiteStoreConv* pks = nullptr;
 };
 
 TEST_F(StoreTestFixture, PreKeyStore)
@@ -109,6 +109,19 @@ TEST_F(StoreTestFixture, PreKeyStore)
 
     result = pks->storePreKey(3, *pk);
     ASSERT_TRUE(result == SQLITE_CONSTRAINT) << pks->getLastError();
+
+    int32_t sqlCode;
+    result = pks->countUnsignedPreKeys(&sqlCode);
+    ASSERT_FALSE(SQL_FAIL(sqlCode)) << pks->getLastError();
+    ASSERT_EQ(1, result);
+
+    result = pks->storePreKey(5, *pk);
+    ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
+    ASSERT_TRUE(pks->containsPreKey(5));
+
+    result = pks->countUnsignedPreKeys(&sqlCode);
+    ASSERT_FALSE(SQL_FAIL(sqlCode)) << pks->getLastError();
+    ASSERT_EQ(2, result);
 
     pk_1.clear();
     result = pks->loadPreKey(3, pk_1);

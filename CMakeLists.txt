@@ -147,7 +147,8 @@ if (SAN_FLAGS)
 endif()
 
 set(zinaLibName zina)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11")
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
 ### No more configuration below this line (usually ;-) )
 if (EXISTS "${ZRTP_BASE_DIR}/zrtp/crypto/hmac256.cpp")
@@ -261,6 +262,8 @@ set (storage_src
 
 set (key_mngmnt_src
     keymanagment/PreKeys.cpp
+    keymanagment/PreKeys.h
+    keymanagment/KeyProvisioningServerApi.h
 )
 
 set (provisioning_src
@@ -277,7 +280,13 @@ set (util_src
     util/UUID.cpp
     logging/Logger.cpp
     logging/ZinaLogging.cpp
-    util/Utilities.cpp)
+    util/Utilities.cpp
+        json/json.hpp
+        )
+
+set (common_src
+        common/DataStructures.h
+        )
 
 set (app_repo_src
     appRepository/AppRepository.cpp
@@ -305,7 +314,8 @@ set (zina_src
     ${external_src}
     ${app_repo_src}
     ${vector_src}
-)
+        ${common_src}
+        )
 
 include(FindDoxygen)
 if (DOXYGEN_FOUND)

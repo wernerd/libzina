@@ -16,7 +16,6 @@ package zina;
 
 option optimize_for = LITE_RUNTIME;
 
-
 // Required Is Forever:
 // You should be very careful about marking fields as required. If at some point you wish
 // to stop writing or sending a required field, it will be problematic to change the field

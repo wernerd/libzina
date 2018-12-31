@@ -31,6 +31,7 @@ limitations under the License.
 #include <vector>
 #include <map>
 
+#include "../../common/TypeHelpers.h"
 #include "../../logging/ZinaLogging.h"
 #include "../../util/cJSON.h"
 
@@ -70,7 +71,6 @@ struct charDeleter_ {
 
 typedef std::unique_ptr<cJSON, cJsonDeleter_> JsonUnique;
 typedef std::unique_ptr<char, charDeleter_> CharUnique;
-typedef std::unique_ptr<std::string> StringUnique;
 
 namespace zina {
 

@@ -39,6 +39,26 @@ namespace zina {
 class ScProvisioning : public Provisioning
 {
 public:
+
+    explicit ScProvisioning(std::string& authorization) : authorizationCode(authorization) {}
+
+    ~ScProvisioning() override = default;
+
+    int32_t
+    updateKeyBundle(const std::string& userId, const std::string& deviceId, const DhPublicKey& identity,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingOnetimePreKeys,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingSingedPreKeys,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > newOneTimePreKeys,
+                    std::unique_ptr<PreKeyData> newSignedPreKey) override
+    {
+    }
+
+    KeyBundleUnique
+    getKeyBundle(const std::string& userId, const std::string& deviceId) override
+    {
+        return Provisioning::getPreKeyBundle(userId, deviceId, authorizationCode);
+    }
+
     /**
      * @brief Initialization code must set a HTTP helper function
      * 
@@ -46,7 +66,14 @@ public:
      */
     static void setHttpHelper(HTTP_FUNC httpHelper);
 
+    ScProvisioning(const ScProvisioning& other)  = delete;
+    ScProvisioning& operator=(const ScProvisioning& other)  = delete;
+    bool operator==(const ScProvisioning& other) const = delete;
+
 private:
+
+    std::string authorizationCode;
+
     friend class Provisioning;
     /**
      * @brief functions pointer to the HTTP helper function
@@ -67,13 +94,6 @@ private:
      * @return the request return code, usually a HTTP code like 200 or something like that.
      */
     static HTTP_FUNC httpHelper_;
-
-    ScProvisioning() {}
-    ~ScProvisioning() {}
-
-    ScProvisioning(const ScProvisioning& other)  = delete;
-    ScProvisioning& operator=(const ScProvisioning& other)  = delete;
-    bool operator==(const ScProvisioning& other) const = delete;
 
 };
 } // namespace

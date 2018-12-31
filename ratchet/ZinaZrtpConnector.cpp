@@ -24,29 +24,6 @@ limitations under the License.
 
 using namespace std;
 
-#ifdef UNITTESTS
-// Used in testing and debugging to do in-depth checks
-static char hexBuffer[2000] = {0};
-static void hexdump(const char* title, const unsigned char *s, size_t l) {
-    size_t n = 0;
-    if (s == NULL) return;
-
-    memset(hexBuffer, 0, 2000);
-    int len = sprintf(hexBuffer, "%s",title);
-    for( ; n < l ; ++n)
-    {
-        if((n%16) == 0)
-            len += sprintf(hexBuffer+len, "\n%04x", static_cast<int>(n));
-        len += sprintf(hexBuffer+len, " %02x",s[n]);
-    }
-    sprintf(hexBuffer+len, "\n");
-}
-static void hexdump(const char* title, const string& in)
-{
-    hexdump(title, (uint8_t*)in.data(), in.size());
-}
-#endif
-
 static mutex sessionLock;
 
 static map<string, ZinaZrtpConnector*>* stagingList = new map<string, ZinaZrtpConnector*>;
@@ -215,16 +192,20 @@ void setAxoExportedKey(const string& localUser, const string& user, const string
 
 typedef AppInterfaceImpl* (*GET_APP_IF)();
 
-#ifdef ANDROID_NDK
+#ifndef UNITTESTS
+#  ifdef ANDROID_NDK
 AppInterfaceImpl* j_getAxoAppInterface();
 static GET_APP_IF getAppIf = j_getAxoAppInterface;
-#elif defined __APPLE__
+#  elif defined __APPLE__
 AppInterfaceImpl* t_getAxoAppInterface();
 static GET_APP_IF getAppIf = t_getAxoAppInterface;
-#else
+#  else
 #warning Get application interface call not initialized - ZRTP connection may not work
-static GET_APP_IF getAppIf = NULL;
-#endif
+static GET_APP_IF getAppIf = nullptr;
+#  endif
+#else
+static GET_APP_IF getAppIf = nullptr;
+#endif // UNITTESTS
 
 static string extractNameFromUri(const string& sipUri)
 {

@@ -29,6 +29,7 @@ limitations under the License.
 
 #include "state/ZinaConversation.h"
 #include "crypto/DhKeyPair.h"
+#include "../common/DataStructures.h"
 
 namespace zina {
 
@@ -40,7 +41,7 @@ class ZinaPreKeyConnector
 {
 public:
     /**
-     * @brief Setup Axolotl conversion for Alice role.
+     * @brief Setup Zina conversion for Alice role.
      * 
      * According to the optimized pre-key mechanism the party who requested the pre-key bundle
      * takes the Alice Axolotl role.
@@ -67,7 +68,7 @@ public:
      * @return @c OK or an error code
      */
     static int32_t setupConversationAlice(const std::string& localUser, const std::string& user, const std::string& deviceId,
-                                          int32_t bobPreKeyId, std::pair<PublicKeyUnique, PublicKeyUnique>& bobKeys,
+                                          KeyBundleUnique bobKeyBundle,
                                           SQLiteStoreConv &store);
 
     /**

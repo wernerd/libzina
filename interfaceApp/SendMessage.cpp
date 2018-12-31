@@ -620,9 +620,9 @@ AppInterfaceImpl::sendMessageNewUser(const CmdQueueInfo &sendInfo)
         return sendMessageExisting(sendInfo, move(zinaConversation));
     }
 
-    pair<PublicKeyUnique, PublicKeyUnique> preIdKeys;
-    int32_t preKeyId = Provisioning::getPreKeyBundle(sendInfo.queueInfo_recipient, sendInfo.queueInfo_deviceId, authorization_, &preIdKeys);
-    if (preKeyId == 0) {
+
+    auto keyBundle = Provisioning::getPreKeyBundle(sendInfo.queueInfo_recipient, sendInfo.queueInfo_deviceId, authorization_);
+    if (keyBundle->preKeyId == 0) {
         LOGGER(ERROR, "No pre-key bundle available for recipient ", sendInfo.queueInfo_recipient, ", device id: ", sendInfo.queueInfo_deviceId);
         LOGGER(INFO, __func__, " <-- No pre-key bundle");
         getAndMaintainRetainInfo(sendInfo.queueInfo_transportMsgId  & ~0xff, false);
@@ -630,7 +630,7 @@ AppInterfaceImpl::sendMessageNewUser(const CmdQueueInfo &sendInfo)
     }
 
     int32_t buildResult = ZinaPreKeyConnector::setupConversationAlice(ownUser_, sendInfo.queueInfo_recipient,
-                                                                      sendInfo.queueInfo_deviceId, preKeyId, preIdKeys, *store_);
+                                                                      sendInfo.queueInfo_deviceId, move(keyBundle), *store_);
 
     // This is always a security issue: return immediately, don't process and send a message
     if (buildResult != SUCCESS) {

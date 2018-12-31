@@ -47,7 +47,7 @@ static const int32_t bobRegisterId = 4711;
 
 static const Ec255PublicKey bobIdpublicKey(keyInData);
 
-static PreKeys::PreKeyData bobPreKey(0, nullptr);
+static unique_ptr<PreKeyData> bobPreKey;
 
 #ifdef UNITTESTS
 // Used in testing and debugging to do in-depth checks
@@ -134,14 +134,18 @@ static int32_t helper1(const std::string& requestUrl, const std::string& method,
     size_t b64Len = b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
     cJSON_AddStringToObject(axolotl, "identity_key", b64Buffer);
 
-    bobPreKey = PreKeys::generatePreKey(store);
+    // Need a key pair here
+    const Ec255PublicKey baseKey_1(keyInData_1);
+    const Ec255PrivateKey basePriv_1(keyInData_2);
+
+    bobPreKey = make_unique<PreKeyData>(33, make_unique<DhKeyPair>(baseKey_1, basePriv_1));
 
     cJSON* jsonPkr;
     cJSON_AddItemToObject(axolotl, "preKey", jsonPkr = cJSON_CreateObject());
-    cJSON_AddNumberToObject(jsonPkr, "id", bobPreKey.keyId);
+    cJSON_AddNumberToObject(jsonPkr, "id", bobPreKey->keyId);
 
     // Get pre-key's public key data, serialized and add it to JSON
-    data = bobPreKey.keyPair->getPublicKey().serialize();
+    data = bobPreKey->keyPair->getPublicKey().serialize();
     b64Len = b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
     cJSON_AddStringToObject(jsonPkr, "key", b64Buffer);
 
@@ -156,26 +160,22 @@ TEST(PreKeyBundle, Basic)
 {
     LOGGER_INSTANCE setLogLevel(ERROR);
 
-    store = SQLiteStoreConv::getStore();
-    if (!store->isReady()) {
-        store->setKey(std::string((const char*)keyInData, 32));
-        store->openStore(std::string());
-    }
+//    store = SQLiteStoreConv::getStore();
+//    if (!store->isReady()) {
+//        store->setKey(std::string((const char*)keyInData, 32));
+//        store->openStore(std::string());
+//    }
     ScProvisioning::setHttpHelper(helper1);
 
-
-    pair<PublicKeyUnique, PublicKeyUnique> preIdKeys;
-    int32_t preKeyId = Provisioning::getPreKeyBundle(bob, bobDevId, bobAuth, &preIdKeys);
+    auto keyBundle = Provisioning::getPreKeyBundle(bob, bobDevId, bobAuth);
     
-    ASSERT_EQ(bobPreKey.keyId, preKeyId);
-    ASSERT_TRUE(bobIdpublicKey == *(preIdKeys.first));
-
+    ASSERT_EQ(bobPreKey->keyId, keyBundle->preKeyId);
+    ASSERT_TRUE(bobIdpublicKey == *static_cast<const Ec255PublicKey*>(keyBundle->identityKey.get()));
 }
 
 // This simulates an answer from the provisioning server repsonding number of availabe pre-keys
 //
 /*
- /*
  {
     "version" :        <int32_t>,        # Version of JSON new pre-keys, 1 for the first implementation
     "scClientDevId"  : <string>,         # the same string as used to register the device (v1/me/device/{device_id}/)

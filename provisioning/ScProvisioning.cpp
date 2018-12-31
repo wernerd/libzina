@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 #include <cstdio>
+#include <memory>
+
 #include "ScProvisioning.h"
 
 #include "../util/b64helper.h"
@@ -25,8 +27,10 @@ limitations under the License.
 
 using namespace zina;
 using namespace std;
+using json = nlohmann::json;
 
-int32_t (*ScProvisioning::httpHelper_)(const std::string&, const std::string&, const std::string&, std::string*) = NULL;
+
+int32_t (*ScProvisioning::httpHelper_)(const std::string&, const std::string&, const std::string&, std::string*) = nullptr;
 
 void ScProvisioning::setHttpHelper(int32_t (*httpHelper)( const std::string&, const std::string&, const std::string&, std::string* ))
 {
@@ -75,7 +79,7 @@ int32_t Provisioning::removeZinaDevice(const string& scClientDevId, const string
  * Server response:
 {
   "axolotl": {
-     "prekey": {
+     "preKey": {
          "id": 740820098, 
          "key": "AbInUu24ot/07lc4q432zrwd+xbZA8oS1+OB/8j1CKU3"
      },
@@ -85,8 +89,7 @@ int32_t Provisioning::removeZinaDevice(const string& scClientDevId, const string
 */
 static const char* getPreKeyRequest = "/v1/user/%s/device/%s/?api_key=%s";
 
-int32_t Provisioning::getPreKeyBundle(const string& name, const string& longDevId, const string& authorization,
-                                      pair<PublicKeyUnique, PublicKeyUnique>* preIdKeys)
+KeyBundleUnique Provisioning::getPreKeyBundle(const string& name, const string& longDevId, const string& authorization)
 {
     LOGGER(DEBUGGING, __func__, " -->");
 
@@ -100,47 +103,32 @@ int32_t Provisioning::getPreKeyBundle(const string& name, const string& longDevI
     int32_t code = ScProvisioning::httpHelper_(requestUri, GET, Empty, &response);
 
     if (code >= 400)
-        return 0;
+        return nullptr;
 
     uint8_t pubKeyBuffer[MAX_KEY_BYTES_ENCODED];
 
-    JsonUnique uniqueJson(cJSON_Parse(response.c_str()));
-    cJSON* root = uniqueJson.get();
+    try {
+        auto keyBundle = make_unique<KeyBundle>();
+        auto j = json::parse(response);
 
-    if (root == NULL) {
-        LOGGER(ERROR, "Wrong pre-key bundle JSON data, ignoring.");
-        return 0;
+        auto axoData = j.at("axolotl");     // at() throws if element not found, use value(..., ...) to use default, not throw
+
+        string identity = axoData.at("identity_key");
+        b64Decode(identity.data(), identity.size(), pubKeyBuffer, MAX_KEY_BYTES_ENCODED);
+        keyBundle->identityKey = EcCurve::decodePoint(pubKeyBuffer);
+
+        auto preKey = axoData.at("preKey");
+        keyBundle->preKeyId = preKey.at("id");
+
+        string pkyPub = preKey.at("key");
+        b64Decode(pkyPub.data(), pkyPub.size(), pubKeyBuffer, MAX_KEY_BYTES_ENCODED);
+        keyBundle->preKey = EcCurve::decodePoint(pubKeyBuffer);
+        return keyBundle;
+
+    } catch (json::exception& e) {
+        LOGGER(ERROR, "Wrong pre-key bundle JSON data, ignoring: ", e.what());
+        return nullptr;
     }
-
-    cJSON* cjKey = cJSON_GetObjectItem(root, "axolotl");
-    if (cjKey == NULL) {
-        LOGGER(ERROR, "Not a valid pre-key bundle, ignoring.");
-        return 0;
-    }
-
-    cJSON* cjTemp = cJSON_GetObjectItem(cjKey, "identity_key");
-    char* jsString = (cjTemp != NULL) ? cjTemp->valuestring : NULL;
-    if (jsString == NULL) {
-        LOGGER(ERROR, "Missing identity key in pre-key bundle, ignoring.");
-        return 0;
-    }
-    string identity(jsString);
-
-    cJSON* pky = cJSON_GetObjectItem(cjKey, "preKey");
-    int32_t pkyId = cJSON_GetObjectItem(pky, "id")->valueint;
-    string pkyPub(cJSON_GetObjectItem(pky, "key")->valuestring);
-
-    b64Decode(pkyPub.data(), pkyPub.size(), pubKeyBuffer, MAX_KEY_BYTES_ENCODED);
-    PublicKeyUnique prePublic = EcCurve::decodePoint(pubKeyBuffer);
-
-    b64Decode(identity.data(), identity.size(), pubKeyBuffer, MAX_KEY_BYTES_ENCODED);
-    PublicKeyUnique identityKey = EcCurve::decodePoint(pubKeyBuffer);
-
-    preIdKeys->first = move(identityKey);
-    preIdKeys->second = move(prePublic);
-
-    LOGGER(DEBUGGING, __func__, " <--");
-    return pkyId;
 }
 
 // Implementation of the Provisioning API: Available pre-keys
@@ -231,18 +219,6 @@ int32_t Provisioning::getNumPreKeys(const string& longDevId,  const string& auth
  }
  */
 static const char* getUserDevicesRequest = "/v1/user/%s/device/?filter=axolotl&api_key=%s";
-
-shared_ptr<list<pair<string, string> > > Provisioning::getZinaDeviceIds(const std::string& name, const std::string& authorization, int32_t* errorCode)
-{
-    LOGGER(DEBUGGING, __func__, " -->");
-
-    shared_ptr<list<pair<string, string> > > deviceIds = make_shared<list<pair<string, string> > >();
-    int32_t code = getZinaDeviceIds(name, authorization, *deviceIds);
-
-    if (errorCode != NULL)
-        *errorCode = code;
-    return deviceIds;
-}
 
 int32_t Provisioning::getZinaDeviceIds(const std::string& name, const std::string& authorization, list<pair<string, string> > &deviceIds)
 {

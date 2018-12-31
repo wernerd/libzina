@@ -17,8 +17,9 @@ limitations under the License.
 //
 // Created by werner on 19.07.17.
 //
-
+#ifndef __APPLE__
 #include <malloc.h>
+#endif
 #include "gtest/gtest.h"
 
 #include "../ratchet/state/ZinaConversation.h"
@@ -57,9 +58,10 @@ public:
     // code here will execute just before the test ensues
     void SetUp() override {
         // capture the memory state at the beginning of the test
+#ifndef __APPLE__
         struct mallinfo minfo = mallinfo();
         beginMemoryState = minfo.uordblks;
-
+#endif
         LOGGER_INSTANCE setLogLevel(WARNING);
 
         store = SQLiteStoreConv::getStore();
@@ -95,7 +97,7 @@ public:
             // Gets information about the currently running test.
             // Do NOT delete the returned object - it's managed by the UnitTest class.
             const ::testing::TestInfo* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-
+#ifndef __APPLE__
             // if there are differences between the memory state at beginning and end, then there are memory leaks
             struct mallinfo minfo = mallinfo();
             if ( beginMemoryState != minfo.uordblks )
@@ -106,6 +108,7 @@ public:
                        << ", difference: " << minfo.uordblks - beginMemoryState
                        << endl;
             }
+#endif
         }
     }
 

@@ -83,7 +83,7 @@ static const char* hasStagedMkSql =
  * SQL statements to process the Pre-key table.
  */
 static const char* dropPreKeys = "DROP TABLE PreKeys;";
-static const char* createPreKeys = "CREATE TABLE PreKeys (keyid INTEGER NOT NULL PRIMARY KEY, preKeyData BLOB, checkData BLOB, signedKey BOOLEAN);";
+static const char* createPreKeys = "CREATE TABLE PreKeys (keyid INTEGER NOT NULL PRIMARY KEY, preKeyData BLOB, checkData BLOB, signedKey BOOLEAN NOT NULL DEFAULT 0);";
 static const char* insertPreKey = "INSERT INTO PreKeys (keyId, preKeyData, signedKey) VALUES (?1, ?2, ?3);";
 static const char* selectPreKey = "SELECT preKeyData FROM PreKeys WHERE keyid=?1;";
 static const char* deletePreKey = "DELETE FROM PreKeys WHERE keyId=?1;";
@@ -577,13 +577,13 @@ int32_t SQLiteStoreConv::updateDb(int32_t oldVersion, int32_t newVersion) {
         oldVersion = 8;
     }
 
-    // Version 8 adds the conversation state column to the trace table
+    // Version 9 adds the signedKey Boolean column to PreKeys table
     if (oldVersion == 8) {
-        SQLITE_PREPARE(db, "ALTER TABLE PreKeys ADD COLUMN convstate VARCHAR;", -1, &stmt, nullptr);
+        SQLITE_PREPARE(db, "ALTER TABLE PreKeys ADD COLUMN signedKey BOOLEAN NOT NULL DEFAULT 0;", -1, &stmt, nullptr);
         sqlCode_ = sqlite3_step(stmt);
         sqlite3_finalize(stmt);
         if (sqlCode_ != SQLITE_DONE) {
-            LOGGER(ERROR, __func__, ", SQL error adding convstate column: ", sqlCode_);
+            LOGGER(ERROR, __func__, ", SQL error adding signedKey column: ", sqlCode_);
             return sqlCode_;
         }
         oldVersion = 9;
