@@ -20,22 +20,22 @@ limitations under the License.
 #include <iostream>
 #include "NameLookup.h"
 #include <mutex>          // std::mutex, std::unique_lock
-#include "../util/cJSON.h"
 #include "../Constants.h"
 #include "../provisioning/Provisioning.h"
 #include "../util/Utilities.h"
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
 
 static mutex nameLock;           // mutex for critical section
 
-NameLookup* NameLookup::instance_ = NULL;
+NameLookup* NameLookup::instance_ = nullptr;
 
 NameLookup* NameLookup::getInstance()
 {
     unique_lock<mutex> lck(nameLock);
-    if (instance_ == NULL)
+    if (instance_ == nullptr)
         instance_ = new NameLookup();
     lck.unlock();
     return instance_;
@@ -43,7 +43,7 @@ NameLookup* NameLookup::getInstance()
 
 static string USER_NULL_NAME("_!NULL!_");
 static const char* nullData =
-                "{\"display_name\": \"%s\",\"uuid\": \"%s\",\"default_alias\": \"%s\"}";
+        R"({"display_name": "%s","uuid": "%s","default_alias": "%s"})";
 
 
 
@@ -78,57 +78,41 @@ const string NameLookup::getUid(const string &alias, const string& authorization
 }
  *
  */
-int32_t NameLookup::parseUserInfo(const string& json, UserInfo &userInfo)
+int32_t NameLookup::parseUserInfo(const string& jsonIn, UserInfo &userInfo)
 {
     LOGGER(DEBUGGING, __func__ , " --> ");
-    cJSON* root = cJSON_Parse(json.c_str());
-    if (root == NULL) {
-        LOGGER(ERROR, __func__ , " JSON data not parseable: ", json);
+    json jsn;
+
+    try {
+        jsn = json::parse(jsonIn);
+    } catch (json::exception& e) {
         return CORRUPT_DATA;
     }
 
-    cJSON* tmpData = cJSON_GetObjectItem(root, "uuid");
-    if (tmpData == NULL || tmpData->valuestring == NULL) {
-        cJSON_Delete(root);
+    userInfo.uniqueId = jsn.value("uuid", "");
+    if (userInfo.uniqueId.empty()) {
         LOGGER(ERROR, __func__ , " Missing 'uuid' field.");
         return JS_FIELD_MISSING;
     }
-    userInfo.uniqueId.assign(tmpData->valuestring);
 
-    tmpData = cJSON_GetObjectItem(root, "default_alias");
-    if (tmpData == NULL || tmpData->valuestring == NULL) {
-        tmpData = cJSON_GetObjectItem(root, "display_alias");
-        if (tmpData == NULL || tmpData->valuestring == NULL) {
-            cJSON_Delete(root);
+    userInfo.alias0 = jsn.value("default_alias", "");
+    if (userInfo.alias0.empty()) {
+        userInfo.alias0 = jsn.value("display_alias", "");
+        if (userInfo.alias0.empty()) {
             LOGGER(ERROR, __func__, " Missing 'default_alias' or 'display_alias' field.");
             return JS_FIELD_MISSING;
         }
     }
-    userInfo.alias0.assign(tmpData->valuestring);
 
-    tmpData = cJSON_GetObjectItem(root, "display_name");
-    if (tmpData != NULL && tmpData->valuestring != NULL) {
-        userInfo.displayName.assign(tmpData->valuestring);
-    }
-    tmpData = cJSON_GetObjectItem(root, "lookup_uri");
-    if (tmpData != NULL && tmpData->valuestring != NULL) {
-        userInfo.contactLookupUri.assign(tmpData->valuestring);
-    }
-    tmpData = cJSON_GetObjectItem(root, "avatar_url");
-    if (tmpData != NULL && tmpData->valuestring != NULL) {
-        userInfo.avatarUrl.assign(tmpData->valuestring);
-    }
-    userInfo.drEnabled = Utilities::getJsonBool(tmpData, "dr_enabled", false);
+    userInfo.displayName = jsn.value("display_name", "");
+    userInfo.contactLookupUri = jsn.value("lookup_uri", "");
+    userInfo.avatarUrl = jsn.value("avatar_url", "");
+    userInfo.drEnabled = jsn.value("dr_enabled", false);
+    userInfo.organization = jsn.value("display_organization", "");
+    userInfo.inSameOrganization = jsn.value("same_organization", false);
 
-    tmpData = cJSON_GetObjectItem(root, "display_organization");
-    if (tmpData != NULL && tmpData->valuestring != NULL) {
-        userInfo.organization.assign(tmpData->valuestring);
-    }
-
-    userInfo.inSameOrganization = Utilities::getJsonBool(tmpData, "same_organization", false);
-
+#if defined(SC_ENABLE_DR)
     tmpData = cJSON_GetObjectItem(root, "data_retention");
-
     if (tmpData != NULL) {
         userInfo.retainForOrg = Utilities::getJsonString(tmpData, "for_org_name", "");
         tmpData = cJSON_GetObjectItem(tmpData, "retained_data");
@@ -140,8 +124,7 @@ int32_t NameLookup::parseUserInfo(const string& json, UserInfo &userInfo)
             userInfo.drRrap = Utilities::getJsonBool(tmpData, "attachment_plaintext", false);
         }
     }
-
-    cJSON_Delete(root);
+#endif
     LOGGER(DEBUGGING, __func__ , " <--");
     return OK;
 }
@@ -153,7 +136,7 @@ NameLookup::insertUserInfoWithUuid(const string& alias, shared_ptr<UserInfo> use
 
     // For existing accounts (old accounts) the UUID and the display alias are identical
     // Don't add an alias entry in this case
-    if (alias.compare(userInfo->uniqueId) != 0) {
+    if (alias != userInfo->uniqueId) {
         ret = nameMap_.insert(pair<string, shared_ptr<UserInfo> >(alias, userInfo));
     }
     return UuidAdded;
@@ -164,7 +147,7 @@ const shared_ptr<UserInfo> NameLookup::getUserInfo(const string &alias, const st
     LOGGER(DEBUGGING, __func__ , " --> ", alias);
     if (alias.empty()) {
         LOGGER(ERROR, __func__ , " <-- empty alias name");
-        if (errorCode != NULL)
+        if (errorCode != nullptr)
             *errorCode = GENERIC_ERROR;
         return shared_ptr<UserInfo>();
     }
@@ -186,7 +169,7 @@ const shared_ptr<UserInfo> NameLookup::getUserInfo(const string &alias, const st
     }
     if (authorization.empty()) {
         LOGGER(ERROR, __func__ , " <-- missing authorization");
-        if (errorCode != NULL)
+        if (errorCode != nullptr)
             *errorCode = GENERIC_ERROR;
         return shared_ptr<UserInfo>();
     }
@@ -208,7 +191,7 @@ const shared_ptr<UserInfo> NameLookup::getUserInfo(const string &alias, const st
         }
         else {
             LOGGER(ERROR, __func__ , " <-- error return from server: ", code);
-            if (errorCode != NULL)
+            if (errorCode != nullptr)
                 *errorCode = code;
             return shared_ptr<UserInfo>();
         }
@@ -379,8 +362,7 @@ shared_ptr<list<string> > NameLookup::getUnknownUsers(const list<string> &aliase
 
     shared_ptr<list<string> > unknownAliasList = make_shared<list<string> >();
     unique_lock<mutex> lck(nameLock);
-    for (list<string>::const_iterator lit = aliases.begin(); lit != aliases.end(); ++lit) {
-        string alias = *lit;
+    for (auto alias : aliases) {
         map<string, shared_ptr<UserInfo> >::iterator it;
         it = nameMap_.find(alias);
         if (it == nameMap_.end()) {
@@ -403,20 +385,20 @@ const shared_ptr<list<string> > NameLookup::getAliases(const string& uuid)
     }
     unique_lock<mutex> lck(nameLock);
 
-    if (nameMap_.size() == 0) {
+    if (nameMap_.empty()) {
         LOGGER(DEBUGGING, __func__ , " <-- empty name map");
         return shared_ptr<list<string> >();
     }
-    for (map<string, shared_ptr<UserInfo> >::iterator it=nameMap_.begin(); it != nameMap_.end(); ++it) {
-        shared_ptr<UserInfo> userInfo = (*it).second;
+    for (auto &it : nameMap_) {
+        shared_ptr<UserInfo> userInfo = it.second;
         // Add aliases to the result. If the map entry is the UUID entry then add the default alias
         if (uuid == userInfo->uniqueId) {
-            if (uuid != (*it).first) {
-                aliasList->push_back((*it).first);
+            if (uuid != it.first) {
+                aliasList->push_back(it.first);
             }
             else {
-                if (!(*it).second->alias0.empty())
-                    aliasList->push_back((*it).second->alias0);
+                if (!it.second->alias0.empty())
+                    aliasList->push_back(it.second->alias0);
             }
         }
     }
@@ -488,7 +470,7 @@ const shared_ptr<string> NameLookup::getDisplayName(const string& uuid)
     }
     unique_lock<mutex> lck(nameLock);
 
-    if (nameMap_.size() == 0) {
+    if (nameMap_.empty()) {
         LOGGER(DEBUGGING, __func__ , " <-- empty name map");
         return shared_ptr<string>();
     }

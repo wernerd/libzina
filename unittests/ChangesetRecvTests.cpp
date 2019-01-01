@@ -29,6 +29,8 @@ limitations under the License.
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
+
 
 static const uint8_t keyInData[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,11,10,20,21,22,23,24,25,26,27,28,20,31,30};
 
@@ -90,22 +92,16 @@ AppInterfaceImpl* appInterface_1;
 
 static string createRecvMessageDescriptor(AppInterfaceImpl* appInterface)
 {
-    shared_ptr<cJSON> sharedRoot(cJSON_CreateObject(), cJSON_deleter);
-    cJSON* root = sharedRoot.get();
+    json jsn;
 
-    cJSON_AddNumberToObject(root, "version", 1);
-    cJSON_AddStringToObject(root, MSG_SENDER, ownName.c_str());  // the 'ownUser' sends the message
+    jsn["version"] = 1;
+    jsn[MSG_SENDER] = ownName;  // the 'ownUser' sends the message
+    jsn[MSG_DEVICE_ID] = longDevId_1;
+    jsn[MSG_ID] = appInterface->generateMsgIdTime();
+    jsn[MSG_MESSAGE] = "Group test message.";
+    jsn[MSG_TYPE] = GROUP_MSG_NORMAL;
 
-    cJSON_AddStringToObject(root, MSG_DEVICE_ID, longDevId_1.c_str());
-    cJSON_AddStringToObject(root, MSG_ID, appInterface->generateMsgIdTime().c_str());
-    cJSON_AddStringToObject(root, MSG_MESSAGE, "Group test message.");
-
-    cJSON_AddNumberToObject(root, MSG_TYPE, GROUP_MSG_NORMAL);
-
-    char* out = cJSON_Print(root);
-    string response(out);
-    free(out);
-    return response;
+    return jsn.dump();
 }
 
 static int32_t groupCmdCallback(const string& command)
@@ -129,16 +125,16 @@ public:
         messageDescr.assign(createRecvMessageDescriptor(appInterface_1));
     }
 
-    void SetUp() {
+    void SetUp() override {
         // code here will execute just before the test ensues
     }
 
-    void TearDown() {
+    void TearDown() override {
         // code here will be called just after the test completes
         // ok to through exceptions from here if need be
     }
 
-    ~ChangeSetTestsFixture()  {
+    ~ChangeSetTestsFixture() override {
         // cleanup any pending stuff, but no exceptions allowed
         store->closeStore();
         delete appInterface_1;

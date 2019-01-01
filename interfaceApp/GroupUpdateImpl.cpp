@@ -30,6 +30,7 @@ limitations under the License.
 using namespace std;
 using namespace zina;
 using namespace vectorclock;
+using json = nlohmann::json;
 
 typedef shared_ptr<GroupChangeSet> PtrChangeSet;
 
@@ -420,20 +421,19 @@ static int32_t prepareChangeSetClocks(const string &groupId, const string &binDe
     return SUCCESS;
 }
 
-static int32_t serializeChangeSet(PtrChangeSet& changeSet, cJSON *root, string *newAttributes)
+static int32_t serializeChangeSet(PtrChangeSet& changeSet, json& jsn, string *newAttributes)
 {
     string serialized;
     if (!changeSet->SerializeToString(&serialized)) {
         return GENERIC_ERROR;
     }
     auto b64Size = static_cast<size_t>(serialized.size() * 2);
-    unique_ptr<char[]> b64Buffer(new char[b64Size]);
+    auto b64Buffer = make_unique<char[]>(b64Size);
     if (b64Encode(reinterpret_cast<const uint8_t *>(serialized.data()), serialized.size(), b64Buffer.get(), b64Size) == 0) {
         return GENERIC_ERROR;
     }
-    cJSON_AddStringToObject(root, GROUP_CHANGE_SET, b64Buffer.get());
-    CharUnique out(cJSON_PrintUnformatted(root));
-    newAttributes->assign(out.get());
+    jsn[GROUP_CHANGE_SET] = b64Buffer.get();
+    newAttributes->assign(jsn.dump());
     return SUCCESS;
 }
 
@@ -828,10 +828,13 @@ int32_t AppInterfaceImpl::createChangeSetDevice(const string &groupId, const str
 
     // The attributes string has a serialized change set already, don't process and add the current change set
     // This may happen if ZINA sends an ACK set back to a device
-    JsonUnique sharedRoot(!attributes.empty() ? cJSON_Parse(attributes.c_str()) : cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
+    json jsn;
+    if (!attributes.empty()) {
+        jsn = json::parse(attributes);
+    }
 
-    if (Utilities::hasJsonKey(root, GROUP_CHANGE_SET)) {
+    // check if already available in  attribute JSON data, if yes -> done
+    if (jsn.find(GROUP_CHANGE_SET) != jsn.end()) {
         return SUCCESS;
     }
     unique_lock<mutex> lck(currentChangeSetLock);
@@ -859,7 +862,7 @@ int32_t AppInterfaceImpl::createChangeSetDevice(const string &groupId, const str
         }
         // Resend a change set only if a device has pending ACKs for this group.
         return store_->hasWaitAckGroupDevice(groupId, binDeviceId, nullptr) ?
-               serializeChangeSet(changeSet, root, newAttributes) : SUCCESS;
+               serializeChangeSet(changeSet, jsn, newAttributes) : SUCCESS;
     }
 
     string updateIdString(reinterpret_cast<const char*>(updateIdGlobal), UPDATE_ID_LENGTH);
@@ -900,7 +903,7 @@ int32_t AppInterfaceImpl::createChangeSetDevice(const string &groupId, const str
         addMissingMetaData(changeSet, groupId, binDeviceId, updateIdGlobal, *store_);
     }
 
-    int32_t result = serializeChangeSet(changeSet, root, newAttributes);
+    int32_t result = serializeChangeSet(changeSet, jsn, newAttributes);
     if (result != SUCCESS) {
         errorCode_ = result;
         return result;
@@ -1064,14 +1067,14 @@ int32_t AppInterfaceImpl::performGroupHello(const string &groupId, const string 
         return result;
     }
 
-    JsonUnique jsonUnique(cJSON_CreateObject());
-    cJSON* root = jsonUnique.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, HELLO);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddStringToObject(root, MSG_DEVICE_ID, getOwnDeviceId().c_str());
+    json jsn;
+
+    jsn[GROUP_COMMAND] = HELLO;
+    jsn[GROUP_ID] = groupId;
+    jsn[MSG_DEVICE_ID] = getOwnDeviceId();
 
     string attributes;
-    result = serializeChangeSet(changeSet, root, &attributes);
+    result = serializeChangeSet(changeSet, jsn, &attributes);
     if (result != SUCCESS) {
         return result;
     }

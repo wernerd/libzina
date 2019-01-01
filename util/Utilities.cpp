@@ -26,78 +26,8 @@ limitations under the License.
 using namespace std;
 using namespace zina;
 
-
-bool Utilities::hasJsonKey(const cJSON* const root, const char* const key) {
-    if (root == nullptr)
-        return false;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), key);
-    return jsonItem != nullptr;
-}
-
-
-int32_t Utilities::getJsonInt(const cJSON* const root, const char* const name, int32_t error) {
-    if (root == nullptr)
-        return error;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), name);
-    if (jsonItem == nullptr)
-        return error;
-    return jsonItem->valueint;
-}
-
-uint32_t Utilities::getJsonUInt(const cJSON* const root, const char* const name, uint32_t error) {
-    if (root == nullptr)
-        return error;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), name);
-    if (jsonItem == nullptr)
-        return error;
-    if (jsonItem->valuedouble > 0xffffffff)
-        return 0xffffffff;
-    if (jsonItem->valuedouble < 0)
-        return 0;
-    return (uint32_t)jsonItem->valuedouble;
-}
-
-
-double Utilities::getJsonDouble(const cJSON* const root, const char* const name, double error) {
-    if (root == nullptr)
-        return error;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), name);
-    if (jsonItem == nullptr)
-        return error;
-    return jsonItem->valuedouble;
-}
-
-
-const char *const Utilities::getJsonString(const cJSON* const root, const char* const name, const char *error) {
-    if (root == nullptr)
-        return error;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), name);
-    if (jsonItem == nullptr)
-        return error;
-    return jsonItem->valuestring;
-}
-
-void Utilities::setJsonString(cJSON* const root, const char* const name, const char *value, const char *def) {
-    if (root == nullptr || name == nullptr)
-        return;
-
-    cJSON_AddStringToObject(root, name, value == nullptr ? def : value);
-    return;
-}
-
-bool Utilities::getJsonBool(const cJSON *const root, const char *const name, bool error) {
-    if (root == nullptr)
-        return error;
-    cJSON* jsonItem = cJSON_GetObjectItem(const_cast<cJSON*>(root), name);
-    if (jsonItem == nullptr)
-        return error;
-    if (jsonItem->type == cJSON_True || jsonItem->type == cJSON_False)
-        return jsonItem->type == cJSON_True;
-    return error;
-}
-
 shared_ptr<vector<string> >
-Utilities::splitString(const string& data, const string delimiter)
+Utilities::splitString(const string& data, const string& delimiter)
 {
     shared_ptr<vector<string> > result = make_shared<vector<string> >();
 

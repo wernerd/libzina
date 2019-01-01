@@ -33,7 +33,6 @@ limitations under the License.
 
 #include "../../common/TypeHelpers.h"
 #include "../../logging/ZinaLogging.h"
-#include "../../util/cJSON.h"
 
 #ifdef ANDROID
 #include "android/jni/sqlcipher/sqlite3.h"
@@ -57,19 +56,9 @@ limitations under the License.
 #endif
 #endif      // DEPRECATED_ZINA
 
-auto cJSON_deleter = [](cJSON* json) {
-    cJSON_Delete(json);
-};
-
-struct cJsonDeleter_ {
-    void operator()(cJSON* json) { cJSON_Delete(json); }
-};
-
 struct charDeleter_ {
     void operator()(char* arg) { free(arg); }
 };
-
-typedef std::unique_ptr<cJSON, cJsonDeleter_> JsonUnique;
 typedef std::unique_ptr<char, charDeleter_> CharUnique;
 
 namespace zina {
@@ -418,9 +407,8 @@ public:
     /**
      * @brief List data of all known groups.
      *
-     * Creates and returns a list of shared pointers to cJSON data structures that contain
-     * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
-     * to free the data structure.
+     * Creates and returns a list of shared pointers to JSON data structures that contain
+     * the groups' data.
      *
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @param groups pointer to list which get thew unique JSON data pointers
@@ -431,9 +419,8 @@ public:
     /**
      * @brief List data of all known groups which have a certain user as participant.
      *
-     * Creates and returns a list of shared pointers to cJSON data structures that contain
-     * the groups' data. The shared pointers have a special deleter that calls @c cJSON_delete
-     * to free the data structure.
+     * Creates and returns a list of shared pointers to JSON data structures that contain
+     * the groups' data.
      *
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
      * @param participantUuid Participant's uuid to use in query
@@ -445,9 +432,8 @@ public:
     /**
      * @brief Get data of a group.
      *
-     * Returns a shared pointer to a cJSON data structure that contains the group's
-     * data. The shared pointer has a special deleter that calls @c cJSON_delete to free
-     * the data structure.
+     * Returns a shared pointer to a JSON data structure that contains the group's
+     * data.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
@@ -561,9 +547,8 @@ public:
     /**
      * @brief Get all members of a specified group.
      *
-     * Creates and returns a list of unique pointers to cJSON data structures that contain the group's
-     * members data. The unique pointers have a special deleter that calls @c cJSON_delete
-     * to free the data structure.
+     * Creates and returns a list of unique pointers to JSON data structures that contain the group's
+     * members data.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param members pointer to a list of unique pointer to JSON
@@ -583,14 +568,13 @@ public:
     /**
      * @brief Get a member of a specified group.
      *
-     * Creates and returns a shared pointer to a cJSON data structure that contains the member's
-     * data. The member may have more than one record, one for each device. The shared pointer
-     * has a special deleter that calls @c cJSON_delete to free the data structure.
+     * Creates and returns a shared pointer to a JSON data structure that contains the member's
+     * data. The member may have more than one record, one for each device.
      *
      * @param groupUuid The group's UUID (RFC4122 time based UUID)
      * @param memberUuid the new member's UID
      * @param sqlCode If not @c nullptr returns the SQLite return/error code
-     * @return list of cJSON pointers to cJSON data structure, maybe empty, never @c nullptr
+     * @return list of JSON pointers to JSON data structure, maybe empty, never @c nullptr
      */
     JSONUnique getGroupMember(const std::string &groupUuid, const std::string &memberUuid, int32_t *sqlCode = nullptr);
 

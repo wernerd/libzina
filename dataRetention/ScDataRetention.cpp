@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "ScDataRetention.h"
 
-#include "../util/cJSON.h"
 #include "../logging/ZinaLogging.h"
 #include "../appRepository/AppRepository.h"
 #include "../ratchet/state/ZinaConversation.h"

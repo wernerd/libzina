@@ -33,6 +33,7 @@ limitations under the License.
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
 
 // Locks, conditional variables and flags to synchronize the functions to re-key a device
 // conversation (ratchet context) and to re-scan devices.
@@ -50,19 +51,21 @@ AppInterfaceImpl::AppInterfaceImpl(const string& ownUser, const string& authoriz
                                    GROUP_MSG_RECV_FUNC groupMsgCallback, GROUP_CMD_RECV_FUNC groupCmdCallback,
                                    GROUP_STATE_FUNC groupStateCallback):
         AppInterface(receiveCallback, stateReportCallback, notifyCallback, groupMsgCallback, groupCmdCallback, groupStateCallback),
-        tempBuffer_(NULL), tempBufferSize_(0), ownUser_(ownUser), authorization_(authorization), scClientDevId_(scClientDevId),
-        errorCode_(0), transport_(NULL), flags_(0), siblingDevicesScanned_(false), drLrmm_(false), drLrmp_(false), drLrap_(false),
+        tempBuffer_(nullptr), tempBufferSize_(0), ownUser_(ownUser), authorization_(authorization), scClientDevId_(scClientDevId),
+        errorCode_(0), transport_(nullptr), flags_(0), siblingDevicesScanned_(false), drLrmm_(false), drLrmp_(false), drLrap_(false),
         drBldr_(false), drBlmr_(false), drBrdr_(false), drBrmr_(false)
 {
     store_ = SQLiteStoreConv::getStore();
+#if defined(SC_ENABLE_DR)
     ScDataRetention::setAuthorization(authorization);
+#endif
 }
 
 AppInterfaceImpl::~AppInterfaceImpl()
 {
     LOGGER(DEBUGGING, __func__, " -->");
-    tempBufferSize_ = 0; delete tempBuffer_; tempBuffer_ = NULL;
-    delete transport_; transport_ = NULL;
+    tempBufferSize_ = 0; delete tempBuffer_; tempBuffer_ = nullptr;
+    delete transport_; transport_ = nullptr;
     LOGGER(DEBUGGING, __func__, " <--");
 }
 
@@ -71,21 +74,17 @@ string AppInterfaceImpl::createSupplementString(const string& attachmentDesc, co
     LOGGER(DEBUGGING, __func__, " -->");
     string supplement;
     if (!attachmentDesc.empty() || !messageAttrib.empty()) {
-        cJSON* msgSupplement = cJSON_CreateObject();
+        json supplementJson;
 
         if (!attachmentDesc.empty()) {
             LOGGER(VERBOSE, "Adding an attachment descriptor supplement");
-            cJSON_AddStringToObject(msgSupplement, "a", attachmentDesc.c_str());
+            supplementJson["a"] = attachmentDesc;
         }
-
         if (!messageAttrib.empty()) {
             LOGGER(VERBOSE, "Adding an message attribute supplement");
-            cJSON_AddStringToObject(msgSupplement, "m", messageAttrib.c_str());
+            supplementJson["m"] = messageAttrib;
         }
-        char *out = cJSON_PrintUnformatted(msgSupplement);
-
-        supplement = out;
-        cJSON_Delete(msgSupplement); free(out);
+        supplement = supplementJson.dump();
     }
     LOGGER(DEBUGGING, __func__, " <--");
     return supplement;
@@ -99,30 +98,28 @@ string* AppInterfaceImpl::getKnownUsers()
     LOGGER(DEBUGGING, __func__, " -->");
     if (!store_->isReady()) {
         LOGGER(ERROR, __func__, " Axolotl conversation DB not ready.");
-        return NULL;
+        return nullptr;
     }
 
-    unique_ptr<set<string> > names = store_->getKnownConversations(ownUser_, &sqlCode);
+    auto names = store_->getKnownConversations(ownUser_, &sqlCode);
 
     if (SQL_FAIL(sqlCode) || !names) {
         LOGGER(INFO, __func__, " No known Axolotl conversations.");
-        return NULL;
+        return nullptr;
     }
     size_t size = names->size();
     if (size == 0)
-        return NULL;
+        return nullptr;
 
-    cJSON *root,*nameArray;
-    root=cJSON_CreateObject();
-    cJSON_AddItemToObject(root, "version", cJSON_CreateNumber(1));
-    cJSON_AddItemToObject(root, "users", nameArray = cJSON_CreateArray());
+    json jsn;
+    jsn["version"] = 1;
 
-    for (auto name = names->cbegin(); name != names->cend(); ++name) {
-        cJSON_AddItemToArray(nameArray, cJSON_CreateString((*name).c_str()));
+    json nameArray = json::array();
+    for (const auto& name : *names) {
+        nameArray += name;
     }
-    char *out = cJSON_PrintUnformatted(root);
-    string* retVal = new string(out);
-    cJSON_Delete(root); free(out);
+    jsn["users"] = nameArray;
+    string* retVal = new string(jsn.dump());
 
     LOGGER(DEBUGGING, __func__, " <--");
     return retVal;
@@ -146,23 +143,20 @@ string* AppInterfaceImpl::getKnownUsers()
  */
 int32_t AppInterfaceImpl::registerZinaDevice(string* result)
 {
-    cJSON *root;
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
     LOGGER(DEBUGGING, __func__, " -->");
 
-    root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "version", 1);
+    json jsn;
+    jsn["version"] = 1;
 //    cJSON_AddStringToObject(root, "scClientDevId", scClientDevId_.c_str());
 
-    shared_ptr<ZinaConversation> ownConv = ZinaConversation::loadLocalConversation(ownUser_, *store_);
+    auto ownConv = ZinaConversation::loadLocalConversation(ownUser_, *store_);
     if (!ownConv->isValid()) {
-        cJSON_Delete(root);
         LOGGER(ERROR, __func__, " No own conversation in database.");
         return NO_OWN_ID;
     }
     if (!ownConv->hasDHIs()) {
-        cJSON_Delete(root);
         LOGGER(ERROR, __func__, " Own conversation not correctly initialized.");
         return NO_OWN_ID;
     }
@@ -171,33 +165,29 @@ int32_t AppInterfaceImpl::registerZinaDevice(string* result)
     string data = myIdPair.getPublicKey().serialize();
 
     b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "identity_key", b64Buffer);
+    jsn["identity_key"] = b64Buffer;
 
-    cJSON* jsonPkrArray;
-    cJSON_AddItemToObject(root, "prekeys", jsonPkrArray = cJSON_CreateArray());
+    json jsonPkrArray = json::array();
 
     auto* preList = PreKeys::generatePreKeys(store_);
 
     for (; !preList->empty(); preList->pop_front()) {
         auto& pkPair = preList->front();
 
-        cJSON* pkrObject;
-        cJSON_AddItemToArray(jsonPkrArray, pkrObject = cJSON_CreateObject());
-        cJSON_AddNumberToObject(pkrObject, "id", pkPair.keyId);
+        json pkrObject;
+        pkrObject["id"] = pkPair.keyId;
 
         // Get pre-key's public key data, serialized
         const string keyData = pkPair.keyPair->getPublicKey().serialize();
-
         b64Encode((const uint8_t*) keyData.data(), keyData.size(), b64Buffer, MAX_KEY_BYTES_ENCODED * 2);
-        cJSON_AddStringToObject(pkrObject, "key", b64Buffer);
+        pkrObject["key"] = b64Buffer;
+
+        jsonPkrArray += pkrObject;
     }
     delete preList;
+    jsn["prekeys"] = jsonPkrArray;
 
-    char *out = cJSON_PrintUnformatted(root);
-    string registerRequest(out);
-    cJSON_Delete(root); free(out);
-
-    int32_t code = Provisioning::registerZinaDevice(registerRequest, authorization_, scClientDevId_, result);
+    int32_t code = Provisioning::registerZinaDevice(jsn.dump(), authorization_, scClientDevId_, result);
     if (code != 200) {
         LOGGER(ERROR, __func__, "Failed to register device for ZINA usage, code: ", code);
     }
@@ -249,20 +239,23 @@ void AppInterfaceImpl::rescanUserDevices(const string& userName)
         synchronizeCv.wait(syncCv);
     }
     LOGGER(DEBUGGING, __func__, " <--");
-    return;
 }
 
 
 void AppInterfaceImpl::setHttpHelper(HTTP_FUNC httpHelper)
 {
     ScProvisioning::setHttpHelper(httpHelper);
+#if defined(SC_ENABLE_DR)
     ScDataRetention::setHttpHelper(httpHelper);
+#endif
 }
 
+#if defined(SC_ENABLE_DR)
 void AppInterfaceImpl::setS3Helper(S3_FUNC s3Helper)
 {
     ScDataRetention::setS3Helper(s3Helper);
 }
+#endif
 
 void AppInterfaceImpl::reKeyAllDevices(const string &userName) {
     list<StringUnique> devices;
@@ -310,7 +303,6 @@ void AppInterfaceImpl::reKeyDevice(const string &userName, const string &deviceI
     }
 #endif
     LOGGER(DEBUGGING, __func__, " <--");
-    return;
 }
 
 // ***** Private functions
@@ -319,44 +311,38 @@ void AppInterfaceImpl::reKeyDevice(const string &userName, const string &deviceI
 int32_t AppInterfaceImpl::parseMsgDescriptor(const string& messageDescriptor, string* recipient, string* msgId, string* message, bool receivedMsg)
 {
     LOGGER(DEBUGGING, __func__, " -->");
-    cJSON* cjTemp;
-    char* jsString;
 
     // wrap the cJSON root into a shared pointer with custom cJSON deleter, this
     // will always free the cJSON root when we leave the function :-) .
-    shared_ptr<cJSON> sharedRoot(cJSON_Parse(messageDescriptor.c_str()), cJSON_deleter);
-    cJSON* root = sharedRoot.get();
 
-    if (root == NULL) {
+    json jsn;
+    try {
+        jsn = json::parse(messageDescriptor);
+    } catch(json::exception& e) {
         errorInfo_ = "root";
         return GENERIC_ERROR;
     }
     const char* recipientSender = receivedMsg ? MSG_SENDER : MSG_RECIPIENT;
-    cjTemp = cJSON_GetObjectItem(root, recipientSender);
-    jsString = (cjTemp != NULL) ? cjTemp->valuestring : NULL;
-    if (jsString == NULL) {
+
+    recipient->assign(jsn.value(recipientSender, ""));
+    if (recipient->empty()) {
         errorInfo_ = recipientSender;
         return JS_FIELD_MISSING;
     }
-    recipient->assign(jsString);
 
     // Get the message id
-    cjTemp = cJSON_GetObjectItem(root, MSG_ID);
-    jsString = (cjTemp != NULL) ? cjTemp->valuestring : NULL;
-    if (jsString == NULL) {
+    msgId->assign(jsn.value(MSG_ID, ""));
+    if (msgId->empty()) {
         errorInfo_ = MSG_ID;
         return JS_FIELD_MISSING;
     }
-    msgId->assign(jsString);
 
     // Get the message
-    cjTemp = cJSON_GetObjectItem(root, MSG_MESSAGE);
-    jsString = (cjTemp != NULL) ? cjTemp->valuestring : NULL;
-    if (jsString == NULL) {
+    if (jsn.find(MSG_MESSAGE) == jsn.end()) {
         errorInfo_ = MSG_MESSAGE;
         return JS_FIELD_MISSING;
     }
-    message->assign(jsString);
+    message->assign(jsn.at(MSG_MESSAGE).get<string>());
 
     LOGGER(DEBUGGING, __func__, " <--");
     return OK;
@@ -483,7 +469,6 @@ void AppInterfaceImpl::reKeyDeviceCommand(const CmdQueueInfo &command) {
     queueMessageToSingleUserDevice(command.queueInfo_recipient, generateMsgIdTime(), command.queueInfo_deviceId,
                                    deviceName, ping, Empty, Empty, MSG_CMD, true, ReKeyAction);
     LOGGER(DEBUGGING, __func__, " <--");
-    return;
 }
 
 void AppInterfaceImpl::setIdKeyVerified(const string &userName, const string& deviceId, bool flag) {
@@ -506,12 +491,13 @@ void AppInterfaceImpl::setIdKeyVerified(const string &userName, const string& de
     addMsgInfoToRunQueue(unique_ptr<CmdQueueInfo>(msgInfo));
 
     LOGGER(DEBUGGING, __func__, " <--");
-    return;
 }
 
 int32_t AppInterfaceImpl::setDataRetentionFlags(const string& jsonFlags)
 {
     LOGGER(DEBUGGING, __func__, " --> ", jsonFlags);
+
+#if defined(SC_ENABLE_DR)
     if (jsonFlags.empty()) {
         return DATA_MISSING;
     }
@@ -528,7 +514,7 @@ int32_t AppInterfaceImpl::setDataRetentionFlags(const string& jsonFlags)
     drBlmr_ = Utilities::getJsonBool(root, BLMR, false);
     drBrdr_ = Utilities::getJsonBool(root, BRDR, false);
     drBrmr_ = Utilities::getJsonBool(root, BRMR, false);
-
+#endif
     LOGGER(DEBUGGING, __func__, " <--");
     return SUCCESS;
 }
@@ -555,7 +541,7 @@ void AppInterfaceImpl::checkRemoteIdKeyCommand(const CmdQueueInfo &command)
     }
     const string remoteIdKey = remote->getDHIr().getPublicKey();
 
-    if (command.stringData3.compare(remoteIdKey) != 0) {
+    if (command.stringData3 != remoteIdKey) {
         LOGGER(ERROR, "<-- Messaging keys do not match, user: '", command.stringData1, "', device: ", command.stringData2);
         return;
     }
@@ -650,7 +636,7 @@ void AppInterfaceImpl::rescanUserDevicesCommand(const CmdQueueInfo &command)
             shared_ptr<ZinaConversation> conv = ZinaConversation::loadLocalConversation(ownUser_, *store_);
             if (conv->isValid()) {
                 const string &convDevName = conv->getDeviceName();
-                if (deviceName.compare(convDevName) != 0) {
+                if (deviceName != convDevName) {
                     conv->setDeviceName(deviceName);
                     conv->storeConversation(*store_);
                 }
@@ -665,7 +651,7 @@ void AppInterfaceImpl::rescanUserDevicesCommand(const CmdQueueInfo &command)
             auto conv = ZinaConversation::loadConversation(ownUser_, userName, deviceId, *store_);
             if (conv->isValid()) {
                 const string &convDevName = conv->getDeviceName();
-                if (deviceName.compare(convDevName) != 0) {
+                if (deviceName != convDevName) {
                     conv->setDeviceName(deviceName);
                     conv->storeConversation(*store_);
                 }

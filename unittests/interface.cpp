@@ -37,6 +37,7 @@ static     std::string empty;
 
 using namespace zina;
 using namespace std;
+using json = nlohmann::json;
 
 SQLiteStoreConv* store;
 
@@ -48,28 +49,6 @@ static const int32_t bobRegisterId = 4711;
 static const Ec255PublicKey bobIdpublicKey(keyInData);
 
 static unique_ptr<PreKeyData> bobPreKey;
-
-#ifdef UNITTESTS
-// Used in testing and debugging to do in-depth checks
-static void hexdump(const char* title, const unsigned char *s, int l) {
-    int n=0;
-
-    if (s == NULL) return;
-
-    fprintf(stderr, "%s",title);
-    for( ; n < l ; ++n)
-    {
-        if((n%16) == 0)
-            fprintf(stderr, "\n%04x",n);
-        fprintf(stderr, " %02x",s[n]);
-    }
-    fprintf(stderr, "\n");
-}
-static void hexdump(const char* title, const std::string& in)
-{
-    hexdump(title, (uint8_t*)in.data(), in.size());
-}
-#endif
 
 // This simulates an answer from the provisioning server repsoning to register a device
 // If necessary check for correctness of request data
@@ -123,16 +102,16 @@ static int32_t helper1(const std::string& requestUrl, const std::string& method,
 
 //    cerr << method << " " << requestUrl << '\n';
 
-    cJSON *root;
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-    root = cJSON_CreateObject();
-    cJSON* axolotl;
-    cJSON_AddItemToObject(root, "axolotl", axolotl = cJSON_CreateObject());
+
+    json jsn;
+
+    json  axolotl;
 
     std::string data = bobIdpublicKey.serialize();
     size_t b64Len = b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(axolotl, "identity_key", b64Buffer);
+    axolotl["identity_key"] = b64Buffer;
 
     // Need a key pair here
     const Ec255PublicKey baseKey_1(keyInData_1);
@@ -140,18 +119,17 @@ static int32_t helper1(const std::string& requestUrl, const std::string& method,
 
     bobPreKey = make_unique<PreKeyData>(33, make_unique<DhKeyPair>(baseKey_1, basePriv_1));
 
-    cJSON* jsonPkr;
-    cJSON_AddItemToObject(axolotl, "preKey", jsonPkr = cJSON_CreateObject());
-    cJSON_AddNumberToObject(jsonPkr, "id", bobPreKey->keyId);
+    json jsonPkr;
+    jsonPkr["id"]= bobPreKey->keyId;
 
     // Get pre-key's public key data, serialized and add it to JSON
     data = bobPreKey->keyPair->getPublicKey().serialize();
     b64Len = b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(jsonPkr, "key", b64Buffer);
+    jsonPkr["key"] = b64Buffer;
+    axolotl["preKey"] = jsonPkr;
+    jsn["axolotl"] = axolotl;
 
-    char* out = cJSON_Print(root);
-    response->append(out);
-    cJSON_Delete(root); free(out);
+    response->append(jsn.dump());
 //    cerr << *response;
     return 200;
 }
@@ -188,17 +166,13 @@ static int32_t helper2(const std::string& requestUrl, const std::string& method,
 {
 //   std::cerr << method << " " << requestUrl << '\n';
 
-    cJSON *root;
+    json jsn;
+    jsn["version"] = 1;
+    jsn["scClientDevId"] = bobDevId;
+    jsn["registrationId"] = bobRegisterId;
+    jsn["availablePreKeys"] = 10;
 
-    root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "version", 1);
-    cJSON_AddStringToObject(root, "scClientDevId", bobDevId.c_str());
-    cJSON_AddNumberToObject(root, "registrationId", bobRegisterId);
-    cJSON_AddNumberToObject(root, "availablePreKeys", 10);
-
-    char* out = cJSON_Print(root);
-    response->append(out);
-    cJSON_Delete(root); free(out);
+    response->append(jsn.dump());
 
 //    std::cerr << *response;
     return 200;
@@ -231,35 +205,22 @@ static int32_t helper3(const std::string& requestUrl, const std::string& method,
 {
 //     std::cerr << method << " " << requestUrl << '\n';
 
-    cJSON *root;
+    json jsn = { {"version", 1} };
 
-    root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "version", 1);
+    json devArray = json::array();
+    devArray += json {
+            {"id", "longDevId_1"}, {"device_name", "Device_1"}
+    };
+    devArray += json {
+            {"id", "longDevId_2"}, {"device_name", "Device_2"}
+    };
+    devArray += json {
+            {"id", "longDevId_3"}, {"device_name", "Device_3"}
+    };
+    jsn["devices"] = devArray;
 
-    cJSON* devArray;
-    cJSON_AddItemToObject(root, "devices", devArray = cJSON_CreateArray());
-
-
-    cJSON* device = cJSON_CreateObject();
-    cJSON_AddItemToObject(device, "id", cJSON_CreateString("longDevId_1"));
-    cJSON_AddItemToObject(device, "device_name", cJSON_CreateString("Device_1"));
-    cJSON_AddItemToArray(devArray, device);
-
-    device = cJSON_CreateObject();
-    cJSON_AddItemToObject(device, "id", cJSON_CreateString("longDevId_2"));
-    cJSON_AddItemToObject(device, "device_name", cJSON_CreateString("Device_2"));
-    cJSON_AddItemToArray(devArray, device);
-
-    device = cJSON_CreateObject();
-    cJSON_AddItemToObject(device, "id", cJSON_CreateString("longDevId_3"));
-    cJSON_AddItemToObject(device, "device_name", cJSON_CreateString("Device_3"));
-    cJSON_AddItemToArray(devArray, device);
-
-    char* out = cJSON_Print(root);
-    response->append(out);
-    cJSON_Delete(root); free(out);
-
-//     std::cerr << *response;
+    response->append(jsn.dump());
+//    std::cerr << *response;c
     return 200;
 }
 

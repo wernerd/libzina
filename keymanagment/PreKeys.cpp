@@ -23,26 +23,24 @@ limitations under the License.
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
 
 static unique_ptr<string> preKeyJson(const DhKeyPair &preKeyPair)
 {
     LOGGER(INFO, __func__, " -->");
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-    cJSON *root = cJSON_CreateObject();
+    json jsn;
 
     b64Encode(preKeyPair.getPrivateKey().privateData(), preKeyPair.getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "private", b64Buffer);
+    jsn["private"] = b64Buffer;
 
     b64Encode((const uint8_t*)preKeyPair.getPublicKey().serialize().data(), preKeyPair.getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "public", b64Buffer);
+    jsn["public"] = b64Buffer;
 
-    CharUnique out(cJSON_Print(root));
-    unique_ptr<string> data(new string(out.get()));
-    cJSON_Delete(root);
 
     LOGGER(DEBUGGING, __func__, " <--");
-    return data;
+    return make_unique<string>(jsn.dump());
 }
 
 PreKeys::PreKeyData PreKeys::generatePreKey(SQLiteStoreConv* store)
@@ -59,7 +57,7 @@ PreKeys::PreKeyData PreKeys::generatePreKey(SQLiteStoreConv* store)
 
     // Create storage format (JSON) of pre-key and store it. Storage encrypts the JSON data
     const auto pk = preKeyJson(*preKeyPair);
-    store->storePreKey(keyId, pk->c_str());
+    store->storePreKey(keyId, *pk);
 
     PreKeyData prePair(keyId, move(preKeyPair));
 
@@ -81,30 +79,32 @@ list<PreKeys::PreKeyData>* PreKeys::generatePreKeys(SQLiteStoreConv* store, int3
     return pkrList;
 }
 
-KeyPairUnique PreKeys::parsePreKeyData(const string& data)
-{
+KeyPairUnique PreKeys::parsePreKeyData(const string& data) {
     LOGGER(DEBUGGING, __func__, " -->");
 
-    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
+    char b64Buffer[MAX_KEY_BYTES_ENCODED * 2];   // Twice the max. size on binary data - b64 is times 1.5
     uint8_t binBuffer[MAX_KEY_BYTES_ENCODED];
 
-    JsonUnique jsonUnique(cJSON_Parse(data.c_str()));
+    json jsn;
+    try {
+        jsn = json::parse(data);
 
-    if (!jsonUnique || !Utilities::hasJsonKey(jsonUnique.get(), "public") ||
-            !Utilities::hasJsonKey(jsonUnique.get(), "private")) {
+        if (jsn.find("public") == jsn.end() || jsn.find("private") == jsn.end()) {
+            return nullptr;
+        }
+    } catch (json::exception&) {
         return KeyPairUnique(nullptr);
     }
 
-    strncpy(b64Buffer, cJSON_GetObjectItem(jsonUnique.get(), "public")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    size_t b64Length = strlen(b64Buffer);
-    b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
+    string pub = jsn["public"];
+    b64Decode(pub.data(), pub.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
     const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
 
     // Here we may check the public curve type and do some code to support different curves and
     // create to correct private key. The serialized public key data contains a curve type id. For
     // the time being use Ec255 (DJB's curve 25519).
-    strncpy(b64Buffer, cJSON_GetObjectItem(jsonUnique.get(), "private")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    size_t binLength = b64Decode(b64Buffer, strlen(b64Buffer), binBuffer, MAX_KEY_BYTES_ENCODED);
+    string priv = jsn["private"];
+    size_t binLength = b64Decode(priv.data(), priv.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
     const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
 
     LOGGER(DEBUGGING, __func__, " <--");

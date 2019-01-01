@@ -18,82 +18,12 @@
 #include <vector>
 #include <memory>
 #include <cstring>
-#include "cJSON.h"
 
 namespace zina {
     class Utilities {
 
     public:
-        /**
-         * @brief Return true if the cJSON structure has the given key
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the key
-         */
-        static bool hasJsonKey(const cJSON* const root, const char* const key);
 
-        /**
-         * @brief Return an integer value from a JSON structure.
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the value
-         * @error Error value, the function returns this value if the JSON structure contains no @c name
-         */
-        static int32_t getJsonInt(const cJSON* const root, const char* const name, int32_t error);
-
-        /**
-         * @brief Return an unsigned integer value from a JSON structure.
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the value
-         * @error Error value, the function returns this value if the JSON structure contains no @c name
-         */
-        static uint32_t getJsonUInt(const cJSON* const root, const char* const name, uint32_t error);
-
-        /**
-         * @brief Return a double value from a JSON structure.
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the value
-         * @error Error value, the function returns this value if the JSON structure contains no @c name
-         */
-        static double getJsonDouble(const cJSON* const root, const char* const name, double error);
-
-        /**
-         * @brief Return a c-string value from a JSON structure.
-         *
-         * The functions returns a pointer to the c-string inside the cJSON data structure.
-         * The caller must not free or modify this pointer.
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the value
-         * @error Error value, the function returns this value if the JSON structure contains no @c name
-         */
-        static const char* const getJsonString(const cJSON* const root, const char* const name, const char* const error);
-
-        /**
-         * @brief Set a string in the cJSON root.
-         *
-         * If `root` or `name` are `nullptr` then return and do not change anything. If the `value` is `nullptr`
-         * then use the default.
-         *
-         * @param root cJSON root
-         * @param name the JSON key
-         * @param value The value to set
-         * @param def Set this if the value is `nullptr`
-         */
-        static void setJsonString(cJSON* const root, const char* const name, const char *value, const char *def);
-
-        /**
-         * @brief Return a boolean value from a JSON structure.
-         *
-         * The functions returns the boolean value of a JSON name.
-         *
-         * @param root the pointer to the cJSON structure
-         * @name Name of the value
-         * @error Error value, the function returns this value if the JSON structure contains no @c name
-         */
-        static bool getJsonBool(const cJSON* const root, const char* const name, bool error);
 
         /**
          * @brief Splits a string around matches of the given delimiter character.
@@ -106,7 +36,7 @@ namespace zina {
          * @param delimiter The delimiter character
          * @return A vector of strings
          */
-        static std::shared_ptr<std::vector<std::string> > splitString(const std::string& data, const std::string delimiter);
+        static std::shared_ptr<std::vector<std::string> > splitString(const std::string& data, const std::string& delimiter);
 
         /**
          * @brief Returns a string with date and Time with milliseconds, formatted according to ISO8601.

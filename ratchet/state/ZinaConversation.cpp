@@ -21,8 +21,7 @@ limitations under the License.
 
 using namespace zina;
 using namespace std;
-
-void Log(const char* format, ...);
+using json = nlohmann::json;
 
 unique_ptr<ZinaConversation>
 ZinaConversation::loadConversation(const string& localUser, const string& user, const string& deviceId, SQLiteStoreConv &store)
@@ -31,7 +30,7 @@ ZinaConversation::loadConversation(const string& localUser, const string& user, 
     int32_t result;
 
     // Create new conversation object
-    auto conv = unique_ptr<ZinaConversation>(new ZinaConversation(localUser, user, deviceId));
+    auto conv = make_unique<ZinaConversation>(localUser, user, deviceId);
     conv->setErrorCode(SUCCESS);
 
     bool found = store.hasConversation(user, deviceId, localUser, &result);
@@ -225,117 +224,111 @@ void ZinaConversation::deleteSecondaryRatchets(SQLiteStoreConv &store)
 void ZinaConversation::deserialize(const std::string& data)
 {
     LOGGER(DEBUGGING, __func__, " -->");
-    JsonUnique uniqueRoot(cJSON_Parse(data.c_str()));
-    cJSON* root = uniqueRoot.get();
 
-    cJSON* jsonItem = cJSON_GetObjectItem(root, "partner");
-    string alias(cJSON_GetObjectItem(jsonItem, "alias")->valuestring);
-    partner_.setAlias(alias);
+    json jsn = json::parse(data);
 
-    jsonItem = cJSON_GetObjectItem(root, "deviceName");
-    if (jsonItem != NULL)
-        deviceName_ = jsonItem->valuestring;
+    partner_.setAlias(jsn["partner"]["alias"]);
+    deviceName_ = jsn.value("deviceName", "");
 
-    char b64Buffer[MAX_KEY_BYTES_ENCODED*2] = {0};  // Twice the max. size on binary data - b64 is times 1.5
     uint8_t binBuffer[MAX_KEY_BYTES_ENCODED];       // max. size on binary data
 
-    // Get RK b64 string, decode and store
     size_t binLength;
-    strncpy(b64Buffer, cJSON_GetObjectItem(root, "RK")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    size_t b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        binLength = b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
-        RK.assign((const char*)binBuffer, binLength);
+
+    // Get RK b64 string, decode and store
+    auto b64data = jsn.value("RK", "");
+    if (!b64data.empty()) {
+        binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+        RK.assign(reinterpret_cast<const char*>(binBuffer), binLength);
     }
 
     // Get the DHRs key pair
-    jsonItem = cJSON_GetObjectItem(root, "DHRs");
-    strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "public")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
+    auto keyObject = jsn.find("DHRs");
+    if (keyObject != jsn.end()) {
+        b64data = (*keyObject).value("public", "");
+        if (!b64data.empty()) {
+            b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
 
-        // Here we may check the public curve type and do some code to support different curves and
-        // create to correct private key. The serilaized public key data contain a curve type id. For
-        // the time being use Ec255 (DJB's curve 25519).
-        strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "private")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-        binLength = b64Decode(b64Buffer, strlen(b64Buffer), binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
+            // Here we may check the public curve type and do some code to support different curves and
+            // create to correct private key. The serialized public key data contain a curve type id. For
+            // the time being use Ec255 (DJB's curve 25519).
+            b64data = (*keyObject).value("private", "");
+            binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
 
-        DHRs = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+            DHRs = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+        }
     }
 
-    strncpy(b64Buffer, cJSON_GetObjectItem(root, "DHRr")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
+    b64data = jsn.value("DHRr", "");
+    if (!b64data.empty()) {
+        b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
         DHRr = EcCurve::decodePoint(binBuffer);
     }
 
     // Get the DHIs key pair
-    jsonItem = cJSON_GetObjectItem(root, "DHIs");
-    strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "public")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
+    keyObject = jsn.find("DHIs");
+    if (keyObject != jsn.end()) {
+        b64data = (*keyObject).value("public", "");
+        if (!b64data.empty()) {
+            b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
 
-        strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "private")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-        binLength = b64Decode(b64Buffer, strlen(b64Buffer), binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
+            b64data = (*keyObject).value("private", "");
+            binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
 
-        DHIs = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+            DHIs = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+        }
     }
-    strncpy(b64Buffer, cJSON_GetObjectItem(root, "DHIr")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
+
+    b64data = jsn.value("DHIr", "");
+    if (!b64data.empty()) {
+        b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
         DHIr = EcCurve::decodePoint(binBuffer);
     }
 
     // Get the A0 key pair
-    jsonItem = cJSON_GetObjectItem(root, "A0");
-    b64Length = strlen(cJSON_GetObjectItem(jsonItem, "public")->valuestring);
-    if (b64Length > 0) {
-        strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "public")->valuestring, b64Length+1);
-        b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
+    keyObject = jsn.find("A0");
+    if (keyObject != jsn.end()) {
+        b64data = (*keyObject).at("public");
+        if (!b64data.empty()) {
+            b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
 
-        strncpy(b64Buffer, cJSON_GetObjectItem(jsonItem, "private")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-        binLength = b64Decode(b64Buffer, strlen(b64Buffer), binBuffer, MAX_KEY_BYTES_ENCODED);
-        const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
+            b64data = (*keyObject).value("private", "");
+            binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
+            const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
 
-        A0 = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+            A0 = KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+        }
     }
 
     // Get CKs b64 string, decode and store
-    strncpy(b64Buffer, cJSON_GetObjectItem(root, "CKs")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        binLength = b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
+    b64data = jsn.value("CKs", "");
+    if (!b64data.empty()) {
+        binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
         CKs.assign((const char*)binBuffer, binLength);
     }
 
     // Get CKr b64 string, decode and store
-    strncpy(b64Buffer, cJSON_GetObjectItem(root, "CKr")->valuestring, MAX_KEY_BYTES_ENCODED*2-1);
-    b64Length = strlen(b64Buffer);
-    if (b64Length > 0) {
-        binLength = b64Decode(b64Buffer, b64Length, binBuffer, MAX_KEY_BYTES_ENCODED);
+    b64data = jsn.value("CKr", "");
+    if (!b64data.empty()) {
+        binLength = b64Decode(b64data.data(), b64data.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
         CKr.assign((const char*)binBuffer, binLength);
     }
-    Ns = cJSON_GetObjectItem(root, "Ns")->valueint;
-    Nr = cJSON_GetObjectItem(root, "Nr")->valueint;
-    PNs = cJSON_GetObjectItem(root, "PNs")->valueint;
-    preKeyId = cJSON_GetObjectItem(root, "preKyId")->valueint;
-    ratchetFlag = cJSON_GetObjectItem(root, "ratchet")->valueint != 0;
 
-    jsonItem = cJSON_GetObjectItem(root, "zrtpState");
-    if (jsonItem != NULL)
-        zrtpVerifyState = jsonItem->valueint;
+    Ns = jsn["Ns"];
+    Nr = jsn["Nr"];
+    PNs = jsn["PNs"];
+    preKeyId = jsn["preKeyId"];
+    ratchetFlag = jsn["ratchet"] != 0;
 
+    if (jsn.find("zrtpState") != jsn.end()) {
+        zrtpVerifyState = jsn["zrtpState"];
+    }
     {
-        int ctxid = Utilities::getJsonInt(root, "contextId", 0);
+        uint32_t ctxid = jsn.value("contextId", 0);
         if (ctxid == INT_MAX) {
             LOGGER(WARNING, __func__, " <-- ZINA contextId is clamped value; undecryptable messages possible");
         }
@@ -344,157 +337,150 @@ void ZinaConversation::deserialize(const std::string& data)
         }
         contextId = ctxid;
     }
-    if (Utilities::hasJsonKey(root, "contextId2")) {
-        contextId2 = Utilities::getJsonUInt(root, "contextId2", 0);
+        if (jsn.find("contextId2") != jsn.end()) {
+        contextId2 = jsn.value("contextId2", 0);
         hasContextId2 = true;
     }
     // We have to check that the `contextId` is not zero because this
     // function is called on a very empty object representing our own
     // device; verifing the `contextId` is nonzero excludes this
     // pseudo-peer.
-    if (contextId != 0 && hasContextId2 == false) {
+    if (contextId != 0 && !hasContextId2) {
         LOGGER(WARNING, __func__, " <-- Supporting ZINA conversation without contextId2");
     }
-    versionNumber = Utilities::getJsonInt(root, "versionNumber", 0);
-    identityKeyChanged = Utilities::getJsonBool(root, "identityKeyChanged", true);
+    versionNumber = jsn["versionNumber"];
+    identityKeyChanged = jsn["identityKeyChanged"];
     if (zrtpVerifyState > 0) {
         identityKeyChanged = false;
     }
-    if (Utilities::hasJsonKey(root, "secondaries")) {
-        cJSON* secondaries = cJSON_GetObjectItem(root, "secondaries");
-        int32_t numSecondaries = cJSON_GetArraySize(secondaries);
+        auto secondaries = jsn.find("secondaries");
+        if (secondaries != jsn.end()) {
+            for (auto& arrayItem : secondaries->items()) {
+                auto secInfo = make_unique<SecondaryInfo>();
+                secInfo->preKeyId = arrayItem.value().value("prekeyid", 0);
+                secInfo->deviceId = arrayItem.value().value("deviceid", "");
+                secInfo->creationTime = arrayItem.value().value("timestamp", 0);
+                secondaryRatchets.push_back(move(secInfo));
 
-        for (int i = 0; i < numSecondaries; i++) {
-            cJSON* arrayItem = cJSON_GetArrayItem(secondaries, i);
-            unique_ptr<SecondaryInfo> secInfo(new SecondaryInfo);
-            secInfo->preKeyId = Utilities::getJsonInt(arrayItem, "prekeyid", 0);
-            secInfo->deviceId = Utilities::getJsonString(arrayItem, "deviceid", "");
-            secInfo->creationTime = Utilities::getJsonInt(arrayItem, "timestamp", 0);
-            secondaryRatchets.push_back(move(secInfo));
+            }
         }
-    }
 
-    LOGGER(DEBUGGING, __func__, " <--");
+        LOGGER(DEBUGGING, __func__, " <--");
 }
 
 const string* ZinaConversation::serialize() const
 {
     LOGGER(DEBUGGING, __func__, " -->");
+
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-    JsonUnique uniqueJson(cJSON_CreateObject());
-    cJSON *root = uniqueJson.get();
+    json jsn;
 
-    cJSON* jsonItem;
-    cJSON_AddItemToObject(root, "partner", jsonItem = cJSON_CreateObject());
-    cJSON_AddStringToObject(jsonItem, "name", partner_.getName().c_str());
-    cJSON_AddStringToObject(jsonItem, "alias", partner_.getAlias().c_str());
+    jsn["partner"]["name"] = partner_.getName();
+    jsn["partner"]["alias"] = partner_.getAlias();
 
-    cJSON_AddStringToObject(root, "deviceId", deviceId_.c_str());
-    cJSON_AddStringToObject(root, "localUser", localUser_.c_str());
-    cJSON_AddStringToObject(root, "deviceName", deviceName_.c_str());
-
+    jsn["deviceId"] = deviceId_;
+    jsn["localUser"] = localUser_;
+    jsn["deviceName"] = deviceName_;
+    
     // b64Encode terminates the B64 string with a nul byte
     b64Encode((const uint8_t*)RK.data(), RK.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "RK", b64Buffer);
-
-
+    jsn["RK"] = b64Buffer;
+    
     // DHRs key pair, private, public
-    cJSON_AddItemToObject(root, "DHRs", jsonItem = cJSON_CreateObject());
     if (DHRs) {
         b64Encode(DHRs->getPrivateKey().privateData(), DHRs->getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "private", b64Buffer);
+        jsn["DHRs"]["private"] = b64Buffer;
 
         b64Encode((const uint8_t*)DHRs->getPublicKey().serialize().data(), DHRs->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "public", b64Buffer);
+        jsn["DHRs"]["public"] = b64Buffer;
     }
     else {
-        cJSON_AddStringToObject(jsonItem, "private", "");
-        cJSON_AddStringToObject(jsonItem, "public", "");
+        jsn["DHRs"]["private"] = "";
+        jsn["DHRs"]["public"] = "";
     }
-
+    
     // DHRr key, public
     if (DHRr) {
         b64Encode((const uint8_t*)DHRr->serialize().data(), DHRr->getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(root, "DHRr", b64Buffer);
-    }
-    else
-        cJSON_AddStringToObject(root, "DHRr", "");
-
-    // DHIs key pair, private, public
-    cJSON_AddItemToObject(root, "DHIs", jsonItem = cJSON_CreateObject());
-    if (DHIs) {
-        b64Encode(DHIs->getPrivateKey().privateData(), DHIs->getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "private", b64Buffer);
-
-        b64Encode((const uint8_t*)DHIs->getPublicKey().serialize().data(), DHIs->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "public", b64Buffer);
+        jsn["DHRr"] = b64Buffer;
     }
     else {
-        cJSON_AddStringToObject(jsonItem, "private", "");
-        cJSON_AddStringToObject(jsonItem, "public", "");
+        jsn["DHRr"] = "";
     }
 
+    // DHIs key pair, private, public
+    if (DHIs) {
+        b64Encode(DHIs->getPrivateKey().privateData(), DHIs->getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+        jsn["DHIs"]["private"] = b64Buffer;
+
+        b64Encode((const uint8_t*)DHIs->getPublicKey().serialize().data(), DHIs->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+        jsn["DHIs"]["public"] = b64Buffer;
+    }
+    else {
+        jsn["DHIs"]["private"] = "";
+        jsn["DHIs"]["public"] = "";
+    }
+    
     // DHIr key, public
     if (DHIr) {
         b64Encode((const uint8_t*)DHIr->serialize().data(), DHIr->getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(root, "DHIr", b64Buffer);
-    }
-    else
-        cJSON_AddStringToObject(root, "DHIr", "");
-
-
-    // A0 key pair, private, public
-    cJSON_AddItemToObject(root, "A0", jsonItem = cJSON_CreateObject());
-    if (A0) {
-        b64Encode(A0->getPrivateKey().privateData(), A0->getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "private", b64Buffer);
-
-        b64Encode((const uint8_t*)A0->getPublicKey().serialize().data(), A0->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "public", b64Buffer);
+        jsn["DHIr"] = b64Buffer;
     }
     else {
-        cJSON_AddStringToObject(jsonItem, "private", "");
-        cJSON_AddStringToObject(jsonItem, "public", "");
+        jsn["DHIr"] = "";
     }
+
+    
+    // A0 key pair, private, public
+    if (A0) {
+        b64Encode(A0->getPrivateKey().privateData(), A0->getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+        jsn["A0"]["private"] = b64Buffer;
+
+        b64Encode((const uint8_t*)A0->getPublicKey().serialize().data(), A0->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+        jsn["A0"]["public"] = b64Buffer;
+    }
+    else {
+        jsn["A0"]["private"] = "";
+        jsn["A0"]["public"] = "";
+    }
+
 
     // The two chain keys
     b64Encode((const uint8_t*)CKs.data(), CKs.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "CKs", b64Buffer);
+    jsn["CKs"] = b64Buffer;
 
     b64Encode((const uint8_t*)CKr.data(), CKr.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    cJSON_AddStringToObject(root, "CKr", b64Buffer);
+    jsn["CKr"] = b64Buffer;
 
-    cJSON_AddNumberToObject(root, "Ns", Ns);
-    cJSON_AddNumberToObject(root, "Nr", Nr);
-    cJSON_AddNumberToObject(root, "PNs", PNs);
-    cJSON_AddNumberToObject(root, "preKyId", preKeyId);
-    cJSON_AddNumberToObject(root, "ratchet", (ratchetFlag) ? 1 : 0);
-    cJSON_AddNumberToObject(root, "zrtpState", zrtpVerifyState);
+    jsn["Ns"] = Ns;
+    jsn["Nr"] = Nr;
+    jsn["PNs"] = PNs;
+    jsn["preKeyId"] = preKeyId;
+    jsn["ratchet"] = (ratchetFlag) ? 1 : 0;
+    jsn["zrtpState"] = zrtpVerifyState;
 
-    cJSON_AddNumberToObject(root, "contextId", contextId);
+    jsn["contextId"] = contextId;
     if (hasContextId2) {
-        cJSON_AddNumberToObject(root, "contextId2", contextId2);
+        jsn["contextId2"] = contextId2;
     }
-    cJSON_AddNumberToObject(root, "versionNumber", versionNumber);
-    cJSON_AddBoolToObject(root, "identityKeyChanged", identityKeyChanged);
+    jsn["versionNumber"] = versionNumber;
+    jsn["identityKeyChanged"] = identityKeyChanged;
 
-    if (secondaryRatchets.size()> 0) {
+    if (!secondaryRatchets.empty()) {
         // Create and add JSON array
-        cJSON* secondaries = cJSON_CreateArray();
-        cJSON_AddItemToObject(root, "secondaries", secondaries);
+        json secondaries = json::array();
 
-        for (auto &secInfo : secondaryRatchets) {
-            cJSON* secJson = cJSON_CreateObject();
-            cJSON_AddNumberToObject(secJson, "prekeyid", secInfo->preKeyId);
-            cJSON_AddStringToObject(secJson, "deviceid", secInfo->deviceId.c_str());
-            cJSON_AddNumberToObject(secJson, "timestamp", secInfo->creationTime);
-            cJSON_AddItemToArray(secondaries, secJson);
+        for (auto&& secInfo : secondaryRatchets) {
+            json secJson;
+            secJson["prekeyid"] = secInfo->preKeyId;
+            secJson["deviceid"] = secInfo->deviceId;
+            secJson["timestamp"] = secInfo->creationTime;
+            secondaries.emplace_back(secJson);
         }
+        jsn["secondaries"] = secondaries;
     }
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string* data = new string(out.get());
+    string* data = new string(jsn.dump());
 
     LOGGER(DEBUGGING, __func__, " <--");
     return data;
@@ -531,11 +517,12 @@ void ZinaConversation::reset()
 JSONUnique
 ZinaConversation::prepareForCapture(JSONUnique existingRoot, bool beforeAction) {
     LOGGER(DEBUGGING, __func__, " -->");
+
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
     JSONUnique root = (existingRoot == nullptr) ? make_unique<nlohmann::json>() : move(existingRoot);
 
-    nlohmann::json jsonItem;
+    json jsonItem;
 
     jsonItem["name"] = partner_.getName();
     jsonItem["alias"] = partner_.getAlias();

@@ -184,25 +184,21 @@ int32_t Provisioning::getNumPreKeys(const string& longDevId,  const string& auth
     if (code >= 400 || response.empty())
         return -1;
 
-    JsonUnique uniqueJson(cJSON_Parse(response.c_str()));
-    cJSON* root = uniqueJson.get();
-    if (root == NULL) {
+    int32_t numIds;
+    json jsn;
+    try {
+        jsn = json::parse(response);
+
+        json keyIds = jsn.at("axolotl").at("prekeys");
+        if (!keyIds.is_array()) {
+            LOGGER(ERROR, "No pre-keys array, ignoring.");
+            return -1;
+        }
+        numIds = static_cast<int32_t>(keyIds.size());
+    } catch (json::exception& e) {
         LOGGER(ERROR, "Wrong pre-key bundle JSON data, ignoring.");
         return -1;
     }
-
-    cJSON* axolotl = cJSON_GetObjectItem(root, "axolotl");
-    if (axolotl == NULL) {
-        LOGGER(ERROR, "Not a valid pre-key bundle, ignoring.");
-        return -1;
-    }
-
-    cJSON* keyIds = cJSON_GetObjectItem(axolotl, "prekeys");
-    if (keyIds == NULL || keyIds->type != cJSON_Array) {
-        LOGGER(ERROR, "No pre-keys array, ignoring.");
-        return -1;
-    }
-    int32_t numIds = cJSON_GetArraySize(keyIds);
 
     LOGGER(DEBUGGING, __func__, " <--");
     return numIds;
@@ -245,33 +241,29 @@ int32_t Provisioning::getZinaDeviceIds(const std::string& name, const std::strin
     if (response.empty()) {
         return NO_DEVS_FOUND;
     }
-    JsonUnique uniqueJson(cJSON_Parse(response.c_str()));
-    cJSON* root = uniqueJson.get();
-    if (root == NULL) {
+
+    try {
+        json jsn = json::parse(response);
+
+        json devIds = jsn.at("devices");
+        if (!devIds.is_array()) {
+            LOGGER(ERROR, __func__,  "No devices array in response, ignoring.");
+            return NO_DEVS_FOUND;
+        }
+
+        for (auto& item : devIds) {
+            string id = item.value("id", "");
+            if (id.empty()) {
+                LOGGER(ERROR, __func__,  "Missing device id, ignoring.");
+                continue;
+            }
+            string nameString = item.value("device_name", "");
+            pair<string, string> idName(id, nameString);
+            deviceIds.push_back(idName);
+        }
+    } catch (json::exception& e) {
         LOGGER(ERROR, __func__,  "Wrong device response JSON data, ignoring: ", response);
         return NETWORK_ERROR;
-    }
-
-    cJSON* devIds = cJSON_GetObjectItem(root, "devices");
-    if (devIds == NULL || devIds->type != cJSON_Array) {
-        LOGGER(ERROR, __func__,  "No devices array in response, ignoring.");
-        return NO_DEVS_FOUND;
-    }
-    int32_t numIds = cJSON_GetArraySize(devIds);
-    for (int32_t i = 0; i < numIds; i++) {
-        cJSON* arrayItem = cJSON_GetArrayItem(devIds, i);
-        cJSON* devId = cJSON_GetObjectItem(arrayItem, "id");
-        if (devId == NULL) {
-            LOGGER(ERROR, __func__,  "Missing device id, ignoring.");
-            continue;
-        }
-        string id(devId->valuestring);
-        string nameString;
-        cJSON* devName = cJSON_GetObjectItem(arrayItem, "device_name");
-        if (devName != NULL)
-            nameString.assign(devName->valuestring);
-        pair<string, string> idName(id, nameString);
-        deviceIds.push_back(idName);
     }
 
     LOGGER(DEBUGGING, __func__, " <--");
@@ -305,34 +297,30 @@ int32_t Provisioning::newPreKeys(SQLiteStoreConv* store, const string& longDevId
 
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-    JsonUnique uniqueJson(cJSON_CreateObject());
-    cJSON* root = uniqueJson.get();
+    json jsn;
 
-    cJSON* jsonPkrArray;
-    cJSON_AddItemToObject(root, "prekeys", jsonPkrArray = cJSON_CreateArray());
+    json jsonPkrArray = json::array();
 
     auto* preList = PreKeys::generatePreKeys(store, number);
     for (; !preList->empty(); preList->pop_front()) {
         auto& prePair = preList->front();
 
-        cJSON* pkrObject;
-        cJSON_AddItemToArray(jsonPkrArray, pkrObject = cJSON_CreateObject());
-        cJSON_AddNumberToObject(pkrObject, "id", prePair.keyId);
+        json pkrObject;
+        pkrObject["id"] = prePair.keyId;
 
         // Get pre-key's public key data, serialized
         const std::string data = prePair.keyPair->getPublicKey().serialize();
 
         b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(pkrObject, "key", b64Buffer);
+        pkrObject["key"] = b64Buffer;
+        jsonPkrArray += pkrObject;
     }
     delete preList;
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    std::string registerRequest(out.get());
+    jsn["prekeys"] = jsonPkrArray;
 
     LOGGER(DEBUGGING, __func__, " <--");
 
-    return ScProvisioning::httpHelper_(requestUri, PUT, registerRequest, result);
+    return ScProvisioning::httpHelper_(requestUri, PUT, jsn.dump(), result);
 }
 
 // Implementation of the Provisioning API: Get available user info from provisioning server

@@ -4,7 +4,6 @@
 
 #include "MessageCapture.h"
 #include "sqlite/SQLiteStoreConv.h"
-#include "../util/cJSON.h"
 #include "../logging/ZinaLogging.h"
 #include "../Constants.h"
 
@@ -22,21 +21,20 @@ static int32_t filterAttributes(const string& attributes, string *filteredAttrib
 {
     LOGGER(DEBUGGING, __func__, " -->");
 
-    cJSON* root = cJSON_Parse(attributes.c_str());
-    if (root == NULL) {
+    nlohmann::json jsn;
+    try {
+        jsn = nlohmann::json::parse(attributes);
+        jsn.erase(FIELD_LATITUDE);
+        jsn.erase(FIELD_LONGITUDE);
+        jsn.erase(FIELD_TIME);
+        jsn.erase(FIELD_ALTITUDE);
+        jsn.erase(FIELD_ACCURACY_HORIZONTAL);
+        jsn.erase(FIELD_ACCURACY_VERTICAL);
+    } catch (nlohmann::json::exception& e ) {
         return CORRUPT_DATA;
     }
-    cJSON_DeleteItemFromObject(root, FIELD_LATITUDE);
-    cJSON_DeleteItemFromObject(root, FIELD_LONGITUDE);
-    cJSON_DeleteItemFromObject(root, FIELD_TIME);
-    cJSON_DeleteItemFromObject(root, FIELD_ALTITUDE);
-    cJSON_DeleteItemFromObject(root, FIELD_ACCURACY_HORIZONTAL);
-    cJSON_DeleteItemFromObject(root, FIELD_ACCURACY_VERTICAL);
-    char *out = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    filteredAttributes->append(jsn.dump());
 
-    filteredAttributes->append(out);
-    free(out);
     LOGGER(DEBUGGING, __func__ , " <-- ");
     return OK;
 }
@@ -44,7 +42,7 @@ static int32_t filterAttributes(const string& attributes, string *filteredAttrib
 static void cleanupTrace(SQLiteStoreConv &store )
 {
     // Cleanup old traces, currently using the same time as for the Message Key cleanup
-    time_t timestamp = time(0) - MK_STORE_TIME;
+    time_t timestamp = time(nullptr) - MK_STORE_TIME;
     store.deleteMsgTrace(timestamp);
 }
 

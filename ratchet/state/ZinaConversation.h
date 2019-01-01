@@ -35,7 +35,6 @@ limitations under the License.
 #include "../crypto/DhKeyPair.h"
 #include "ZinaContact.h"
 #include "../crypto/Ec255PublicKey.h"
-#include "../../util/cJSON.h"
 #include "../../Constants.h"
 #include "../../storage/sqlite/SQLiteStoreConv.h"
 

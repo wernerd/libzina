@@ -262,6 +262,7 @@ public:
      */
     static void setHttpHelper(HTTP_FUNC httpHelper);
 
+#if defined(SC_ENABLE_DR)
     /**
      * @brief Initialization code must set a S3 helper function
      *
@@ -271,7 +272,7 @@ public:
      * @param s3Helper Pointer to the helper function
      */
     static void setS3Helper(S3_FUNC httpHelper);
-
+#endif
     void setFlags(int32_t flags)  { flags_ = flags; }
 
     bool isRegistered()           { return ((flags_ & 0x1) == 1); }

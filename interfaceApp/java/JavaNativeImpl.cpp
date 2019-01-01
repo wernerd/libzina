@@ -664,7 +664,9 @@ JNI_FUNCTION(doInit)(JNIEnv* env, jobject thiz, jint flags, jstring dbName, jbyt
      * functions 'receiveAxoData' and 'stateReportAxo'
      *********************************************************************************** */
     zinaAppInterface->setHttpHelper(httpHelper);
+#if defined(SC_ENABLE_DR)
     zinaAppInterface->setS3Helper(s3Helper);
+#endif
     zinaAppInterface->setTransport(sipTransport);
 
     return retVal;
@@ -3428,6 +3430,7 @@ JNI_FUNCTION(sendDrMessageData)(JNIEnv* env, jclass clazz, jstring callid, jstri
         return;
     }
 
+#if defined(SC_ENABLE_DR)
     const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
@@ -3451,6 +3454,7 @@ JNI_FUNCTION(sendDrMessageData)(JNIEnv* env, jclass clazz, jstring callid, jstri
         return;
 
     ScDataRetention::sendMessageData(callidString, directionString, recipientString, static_cast<long>(composedTime / 1000), static_cast<long>(sentTime / 1000), messageString);
+#endif
 }
 
 /*
@@ -3467,6 +3471,7 @@ JNI_FUNCTION(sendDrMessageMetadata)(JNIEnv* env, jclass clazz, jstring callid, j
         return;
     }
 
+#if defined(SC_ENABLE_DR)
     const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
@@ -3484,6 +3489,7 @@ JNI_FUNCTION(sendDrMessageMetadata)(JNIEnv* env, jclass clazz, jstring callid, j
         return;
 
     ScDataRetention::sendMessageMetadata(callidString, directionString, DrLocationData(), DrAttachmentData(), recipientString, static_cast<long>(composedTime / 1000), static_cast<long>(sentTime / 1000));
+#endif
 }
 
 /*
@@ -3500,6 +3506,7 @@ JNI_FUNCTION(sendDrInCircleCallMetadata)(JNIEnv * env, jclass clazz, jstring cal
         return;
     }
 
+#if defined(SC_ENABLE_DR)
     const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
@@ -3511,6 +3518,7 @@ JNI_FUNCTION(sendDrInCircleCallMetadata)(JNIEnv * env, jclass clazz, jstring cal
         return;
 
     ScDataRetention::sendInCircleCallMetadata(callidString, static_cast<bool>(isIncoming) ? "received" : "placed", recipientString, static_cast<long>(start / 1000), static_cast<long>(end / 1000));
+#endif
 }
 
 /*
@@ -3527,6 +3535,7 @@ JNI_FUNCTION(sendDrSilentWorldCallMetadata)(JNIEnv * env, jclass clazz, jstring 
         return;
     }
 
+#if defined(SC_ENABLE_DR)
     const char* callidTemp = env->GetStringUTFChars(callid, nullptr);
     string callidString(callidTemp);
     env->ReleaseStringUTFChars(callid, callidTemp);
@@ -3544,6 +3553,7 @@ JNI_FUNCTION(sendDrSilentWorldCallMetadata)(JNIEnv * env, jclass clazz, jstring 
         return;
 
     ScDataRetention::sendSilentWorldCallMetadata(callidString, static_cast<bool>(isIncoming) ? "received" : "placed", srcTnString, dstTnString, static_cast<long>(start / 1000), static_cast<long>(end / 1000));
+#endif
 }
 
 /*
@@ -3556,8 +3566,9 @@ JNI_FUNCTION(processPendingDrRequests)(JNIEnv * env, jclass clazz)
 {
     (void)env;
     (void)clazz;
-
+#if defined(SC_ENABLE_DR)
     ScDataRetention::processRequests();
+#endif
 }
 
 /*
@@ -3572,7 +3583,9 @@ JNI_FUNCTION(isDrEnabled)(JNIEnv * env, jclass clazz)
     (void)clazz;
 
     bool enabled = false;
+#if defined(SC_ENABLE_DR)
     ScDataRetention::isEnabled(&enabled);
+#endif
     return static_cast<jboolean>(enabled);
 }
 
@@ -3592,7 +3605,9 @@ JNI_FUNCTION(isDrEnabledForUser)(JNIEnv * env, jclass clazz, jstring user)
     string userString(userTemp);
     env->ReleaseStringUTFChars(user, userTemp);
 
+#if defined(SC_ENABLE_DR)
     ScDataRetention::isEnabled(userString, &enabled);
+#endif
     return static_cast<jboolean>(enabled);
 }
 
@@ -3616,5 +3631,10 @@ JNI_FUNCTION(setDataRetentionFlags)(JNIEnv* env, jclass clazz, jstring flags)
     string flagsString(flagsTemp);
     env->ReleaseStringUTFChars(flags, flagsTemp);
 
+#if defined(SC_ENABLE_DR)
     return zinaAppInterface->setDataRetentionFlags(flagsString);
+#else
+    return -1;
+#endif
 }
+

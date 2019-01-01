@@ -275,8 +275,7 @@ set (dataretention_src
 )
 
 set (util_src
-    util/cJSON.c
-    util/b64helper.cpp
+        util/b64helper.cpp
     util/UUID.cpp
     logging/Logger.cpp
     logging/ZinaLogging.cpp
@@ -309,7 +308,7 @@ set (zina_src
     ${interface_src}
     ${key_mngmnt_src}
     ${provisioning_src}
-    ${dataretention_src}
+#    ${dataretention_src}
     ${util_src}
     ${external_src}
     ${app_repo_src}

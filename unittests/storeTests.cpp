@@ -36,26 +36,24 @@ static const uint8_t keyInData_2[] = "ZZZZZzzzzzYYYYYyyyyyXXXXXxxxxxW";  // 32 b
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
 
 static string empty;
 
 static string* preKeyJson(const DhKeyPair& preKeyPair)
 {
-    cJSON *root;
     char b64Buffer[280];   // Twice the max. size on binary data - b64 is times 1.5
 
-    root = cJSON_CreateObject();
+    json jsn;
 
     b64Encode(preKeyPair.getPrivateKey().privateData(), preKeyPair.getPrivateKey().getEncodedSize(), b64Buffer, 270);
-    cJSON_AddStringToObject(root, "private", b64Buffer);
+    jsn["private"] = b64Buffer;
 
     b64Encode((const uint8_t*)preKeyPair.getPublicKey().serialize().data(), preKeyPair.getPublicKey().getEncodedSize(), b64Buffer, 270);
-    cJSON_AddStringToObject(root, "public", b64Buffer);
+    jsn["public"] = b64Buffer;
 
-    char *out = cJSON_Print(root);
-    auto* data = new std::string(out);
+    auto* data = new std::string(jsn.dump());
 //    cerr << "PreKey data to store: " << *data << endl;
-    cJSON_Delete(root); free(out);
 
     return data;
 }
@@ -404,22 +402,6 @@ static string memberId_2("6ba7b810-9dad-11d1-80b4-00c04fd43102");
 
 static string deviceId_1("device_1");
 static string deviceId_2("device_2");
-
-static int32_t getJsonInt(cJSON* root, const char* tag, int32_t error)
-{
-    cJSON* jsonItem = cJSON_GetObjectItem(root, tag);
-    if (jsonItem == NULL)
-        return error;
-    return jsonItem->valueint;
-}
-
-static const char* getJsonString(cJSON* root, const char* tag, const char* error)
-{
-    cJSON* jsonItem = cJSON_GetObjectItem(root, tag);
-    if (jsonItem == NULL)
-        return error;
-    return jsonItem->valuestring;
-}
 
 TEST_F(StoreTestFixture, GroupChatStore)
 {
