@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-avoid-goto"
 /*
 Copyright 2016 Silent Circle, LLC
 
@@ -32,45 +34,43 @@ limitations under the License.
 
 using namespace std;
 using namespace zina;
+using json = nlohmann::json;
 
-static string receiveErrorJson(const string& sender, const string& senderScClientDevId, const string& msgId,
+static string
+receiveErrorJson(const string& sender, const string& senderScClientDevId, const string& msgId,
                                const char* other, int32_t errorCode, const string& sentToId, int32_t sqlCode,
                                int32_t msgType, const string &groupId = Empty)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddNumberToObject(root, "version", 1);
+    json jsn;
+    jsn["version"] = 1;
 
-    cJSON* details;
-    cJSON_AddItemToObject(root, "details", details = cJSON_CreateObject());
-
-    cJSON_AddStringToObject(details, "name", sender.c_str());
-    cJSON_AddStringToObject(details, MSG_DEVICE_ID, senderScClientDevId.c_str());
-    cJSON_AddStringToObject(details, "otherInfo", other);
-    cJSON_AddStringToObject(details, MSG_ID, msgId.c_str());         // May help to diagnose the issue
-    cJSON_AddNumberToObject(details, "errorCode", errorCode);
-    cJSON_AddStringToObject(details, "sentToId", sentToId.c_str());
-    cJSON_AddNumberToObject(root, MSG_TYPE, msgType);
     if (!groupId.empty()) {
-        cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
+        jsn[GROUP_ID] = groupId;
     }
+
+    json details;
+    details["name"] = sender;
+    details[MSG_DEVICE_ID] = senderScClientDevId;
+    details["otherInfo"] = other;
+    details[MSG_ID] = msgId;         // May help to diagnose the issue
+    details["errorCode"] = errorCode;
+    details["sentToId"] = sentToId;
+    jsn[MSG_TYPE] = msgType;
     if (errorCode == DATABASE_ERROR)
-        cJSON_AddNumberToObject(details, "sqlErrorCode", sqlCode);
+        details["sqlErrorCode"] = sqlCode;
 
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string retVal(out.get());
-
-    return retVal;
+    jsn["details"] = details;
+    return jsn.dump();
 }
 
-static string receiveErrorDescriptor(const string& messageDescriptor, int32_t result, const string &groupId = Empty)
+static string
+receiveErrorDescriptor(const string& messageDescriptor, int32_t result, const string &groupId = Empty)
 {
-    JsonUnique sharedRoot(cJSON_Parse(messageDescriptor.c_str()));
-    cJSON* root = sharedRoot.get();
+    json jsn = json::parse(messageDescriptor);
 
-    string sender(Utilities::getJsonString(root, MSG_SENDER, ""));
-    string deviceId(Utilities::getJsonString(root, MSG_DEVICE_ID, ""));
-    string msgId(Utilities::getJsonString(root, MSG_ID, ""));
+    string sender(jsn.value(MSG_SENDER, ""));
+    string deviceId(jsn.value(MSG_DEVICE_ID, ""));
+    string msgId(jsn.value(MSG_ID, ""));
 
     return receiveErrorJson(sender, deviceId, msgId, "Error processing plain text message", result, "", 0, -1, groupId);
 }
@@ -85,21 +85,22 @@ bool AppInterfaceImpl::isCommand(int32_t msgType, const string& attributes)
     if (attributes.empty())
         return false;
 
-    shared_ptr<cJSON> attributesJson(cJSON_Parse(attributes.c_str()), cJSON_deleter);
-    cJSON* attributesRoot = attributesJson.get();
-
-    if (attributesRoot == nullptr)
+    json jsn;
+    try {
+        jsn = json::parse(attributes);
+    } catch(json::parse_error& e) {
         return false;
+    }
 
-    string possibleCmd = Utilities::getJsonString(attributesRoot, MSG_COMMAND, "");
+    string possibleCmd(jsn.value(MSG_COMMAND, ""));
     if (!possibleCmd.empty())
         return true;
 
-    possibleCmd = Utilities::getJsonString(attributesRoot, MSG_SYNC_COMMAND, "");
+    possibleCmd = jsn.value(MSG_SYNC_COMMAND, "");
     if (!possibleCmd.empty())
         return true;
 
-    possibleCmd = Utilities::getJsonString(attributesRoot, GROUP_COMMAND, "");
+    possibleCmd = jsn.value(GROUP_COMMAND, "");
     return !possibleCmd.empty();
 }
 
@@ -110,10 +111,9 @@ bool AppInterfaceImpl::isCommand(const CmdQueueInfo& plainMsgInfo)
     if (plainMsgInfo.queueInfo_supplement.empty())
         return false;
 
-    JsonUnique sharedRoot(cJSON_Parse(plainMsgInfo.queueInfo_supplement.c_str()));
-    cJSON* jsSupplement = sharedRoot.get();
+    json jsn = json::parse(plainMsgInfo.queueInfo_supplement);
 
-    string attributes =  Utilities::getJsonString(jsSupplement, "m", "");
+    string attributes =  jsn.value("m", "");
 
     return isCommand(plainMsgInfo.queueInfo_msgType, attributes);
 }
@@ -207,7 +207,7 @@ void AppInterfaceImpl::processMessageRaw(const CmdQueueInfo &msgInfo) {
 
     string supplementsPlain;
     shared_ptr<const string> messagePlain;
-    cJSON *convJson = nullptr;
+    JSONUnique convJson = nullptr;
     unique_ptr<CmdQueueInfo> plainMsgInfo;
     unique_ptr<ZinaConversation> primaryConv;
     unique_ptr<ZinaConversation> secondaryConv;
@@ -273,13 +273,10 @@ void AppInterfaceImpl::processMessageRaw(const CmdQueueInfo &msgInfo) {
     // Prepare some data for debugging if we have a develop build and debugging is enabled
     // We don't capture the message itself but only some relevant, public context data
     LOGGER_BEGIN(INFO)
-        convJson = primaryConv->prepareForCapture(convJson, false);
+        convJson = primaryConv->prepareForCapture(move(convJson), false);
 
-        CharUnique out(cJSON_PrintUnformatted(convJson));
-        string convState(out.get());
-        cJSON_Delete(convJson);
-        MessageCapture::captureReceivedMessage(sender, msgId, senderScClientDevId, convState,
-                                               string("{\"cmd\":\"dummy\"}"), false, *store_);
+        MessageCapture::captureReceivedMessage(sender, msgId, senderScClientDevId, convJson->dump(),
+                                               string(R"({"cmd":"dummy"})"), false, *store_);
     LOGGER_END
     {
         /*
@@ -291,28 +288,24 @@ void AppInterfaceImpl::processMessageRaw(const CmdQueueInfo &msgInfo) {
              "message":    <string>              # the actual plain text message, UTF-8 encoded (Java programmers beware!)
         }
         */
-        JsonUnique uniqueRoot(cJSON_CreateObject());
-        cJSON *root = uniqueRoot.get();
-        cJSON_AddNumberToObject(root, "version", 1);
-        cJSON_AddStringToObject(root, MSG_SENDER, sender.c_str());        // sender is the UUID string
+        json jsn;
+        jsn["version"] = 1;
+        jsn[MSG_SENDER] = sender;        // sender is the UUID string
 
         // backward compatibility or in case the message Transport does not support
         // alias handling. Then fallback to data in the message envelope.
-        cJSON_AddStringToObject(root, MSG_DISPLAY_NAME,
-                                displayName.empty() ? envelope.name().c_str() : displayName.c_str());
-        cJSON_AddStringToObject(root, MSG_DEVICE_ID, senderScClientDevId.c_str());
-        cJSON_AddStringToObject(root, MSG_ID, msgId.c_str());
-        cJSON_AddStringToObject(root, MSG_MESSAGE, messagePlain->c_str());
-        cJSON_AddBoolToObject(root, MSG_ID_KEY_CHANGED, primaryConv->isIdentityKeyChanged());
+        jsn[MSG_DISPLAY_NAME] = displayName.empty() ? envelope.name() : displayName;
+        jsn[MSG_DEVICE_ID] = senderScClientDevId;
+        jsn[MSG_ID] = msgId;
+        jsn[MSG_MESSAGE] = *messagePlain;
+        jsn[MSG_ID_KEY_CHANGED] = primaryConv->isIdentityKeyChanged();
 
-        cJSON_AddNumberToObject(root, MSG_TYPE, msgType);
+        jsn[MSG_TYPE] = msgType;
         messagePlain.reset();
-
-        CharUnique msg(cJSON_PrintUnformatted(root));
-        msgDescriptor = msg.get();
+        msgDescriptor = jsn.dump();
     }
 
-    plainMsgInfo = unique_ptr<CmdQueueInfo>(new CmdQueueInfo);
+    plainMsgInfo = make_unique<CmdQueueInfo>();
     plainMsgInfo->command = ReceivedTempMsg;
     plainMsgInfo->queueInfo_message_desc = msgDescriptor;
     plainMsgInfo->queueInfo_supplement = supplementsPlain;
@@ -407,13 +400,9 @@ void AppInterfaceImpl::processMessageRaw(const CmdQueueInfo &msgInfo) {
         // does not reveal any security relevant data. We do this for builds which are able to log
         // INFO and if log level is INFO or higher
         LOGGER_BEGIN(INFO)
-            CharUnique out(cJSON_PrintUnformatted(convJson));
-            if (out) {
-                string convState(out.get());
-                cJSON_Delete(convJson);
-
-                MessageCapture::captureReceivedMessage(sender, msgId, senderScClientDevId, convState,
-                                                       string("{\"cmd\":\"failed\"}"), false, *store_);
+            if (convJson) {
+                    MessageCapture::captureReceivedMessage(sender, msgId, senderScClientDevId, convJson->dump(),
+                                                           string(R"({"cmd":"failed"})"), false, *store_);
             }
         LOGGER_END
         if (msgType >= GROUP_MSG_NORMAL) {
@@ -452,28 +441,17 @@ void AppInterfaceImpl::processMessagePlain(const CmdQueueInfo &msgInfo)
 
     const string& supplementsPlain = msgInfo.queueInfo_supplement;
     if (!supplementsPlain.empty()) {
-        JsonUnique sharedRoot(cJSON_Parse(supplementsPlain.c_str()));
-        cJSON* jsSupplement = sharedRoot.get();
+        json jsn = json::parse(supplementsPlain);
 
-        cJSON* cjTemp = cJSON_GetObjectItem(jsSupplement, "a");
-        char* jsString = (cjTemp != nullptr) ? cjTemp->valuestring : nullptr;
-        if (jsString != nullptr) {
-            attachmentDescr = jsString;
-        }
-
-        cjTemp = cJSON_GetObjectItem(jsSupplement, "m");
-        jsString = (cjTemp != nullptr) ? cjTemp->valuestring : nullptr;
-        if (jsString != nullptr) {
-            attributesDescr = jsString;
-        }
+        attachmentDescr = jsn.value("a", "");
+        attributesDescr = jsn.value("m", "");
     }
 
     if (msgInfo.queueInfo_msgType >= GROUP_MSG_NORMAL) {
         result = processGroupMessage(msgInfo.queueInfo_msgType, msgInfo.queueInfo_message_desc, attachmentDescr, &attributesDescr);
         if (result != SUCCESS) {
-            JsonUnique sharedRoot(cJSON_Parse(attributesDescr.c_str()));
-            cJSON* root = sharedRoot.get();
-            string groupId(Utilities::getJsonString(root, GROUP_ID, ""));
+            json jsn = json::parse(attributesDescr);
+            string groupId(jsn.value(GROUP_ID, ""));
 
             groupStateReportCallback_(result, receiveErrorDescriptor(msgInfo.queueInfo_message_desc, result, groupId));
             return;
@@ -528,9 +506,8 @@ bool AppInterfaceImpl::dataRetentionReceive(shared_ptr<CmdQueueInfo> plainMsgInf
         }
     }
 
-    shared_ptr<cJSON> sharedRoot(cJSON_Parse(plainMsgInfo->queueInfo_supplement.c_str()), cJSON_deleter);
-    cJSON* jsSupplement = sharedRoot.get();
-    string attributes =  Utilities::getJsonString(jsSupplement, "m", "");
+    jsn jsSupplement = json::parse(plainMsgInfo->queueInfo_supplement);
+    string attributes(jsSupplement.value("m", "");
     if (attributes.empty()) {                           // No attributes -> no RAP, no RAM -> default false
         if (drLrmp_) {                                  // local client requires to retain plaintext data -> reject
             sendErrorCommand(DR_DATA_REQUIRED, sender, msgId);
@@ -541,18 +518,17 @@ bool AppInterfaceImpl::dataRetentionReceive(shared_ptr<CmdQueueInfo> plainMsgInf
             return false;
         }
     }
-    string attachmentDescr = Utilities::getJsonString(jsSupplement, "a", "");
+    string attachmentDescr(jsSupplement.value("a", ""));
 
-    shared_ptr<cJSON> attributesJson(cJSON_Parse(attributes.c_str()), cJSON_deleter);
-    cJSON* attributesRoot = attributesJson.get();
+    json attributesRoot = json::parse(attributes);
 
     int32_t drFlagsMask = 0;
 
-    bool msgRap = Utilities::getJsonBool(attributesRoot, RAP, false);   // Does remote party accept plaintext retention?
+    bool msgRap = attributesRoot.value(RAP, false);   // Does remote party accept plaintext retention?
     if (msgRap)
         drFlagsMask |= RAP_BIT;
 
-    bool msgRam = Utilities::getJsonBool(attributesRoot, RAM, false);   // Does remote party accept meta data retention?
+    bool msgRam = attributesRoot.value(RAM, false);   // Does remote party accept meta data retention?
     if (msgRam)
         drFlagsMask |= RAM_BIT;
 
@@ -570,11 +546,11 @@ bool AppInterfaceImpl::dataRetentionReceive(shared_ptr<CmdQueueInfo> plainMsgInf
         return false;
     }
 
-    bool msgRop = Utilities::getJsonBool(attributesRoot, ROP, false);   // Remote party retained plaintext
+    bool msgRop = attributesRoot.value(ROP, false);   // Remote party retained plaintext
     if (msgRop)
         drFlagsMask |= ROP_BIT;
 
-    bool msgRom = Utilities::getJsonBool(attributesRoot, ROM, false);   // Remote party retained meta data
+    bool msgRom = attributesRoot.value(ROM, false);   // Remote party retained meta data
     if (msgRom)
         drFlagsMask |= ROM_BIT;
 
@@ -613,24 +589,23 @@ bool AppInterfaceImpl::dataRetentionReceive(shared_ptr<CmdQueueInfo> plainMsgInf
 
     DrLocationData location(attributesRoot, msgRap);
 
-    shared_ptr<cJSON> attachmentsJson(cJSON_Parse(attachmentDescr.c_str()), cJSON_deleter);
-    DrAttachmentData attachment(attachmentsJson.get(), msgRap);
+//    shared_ptr<cJSON> attachmentsJson(cJSON_Parse(attachmentDescr.c_str()), cJSON_deleter);
+//    DrAttachmentData attachment(attachmentsJson.get(), msgRap);
 
+    json attachmentsJson = json::parse(attachmentDescr);
     if (msgRap) {
         ScDataRetention::sendMessageMetadata("", "received", location, attachment, sender, composeTime, currentTime);
         ScDataRetention::sendMessageData("", "received", sender, composeTime, currentTime, message);
     } else if (msgRam) {
         ScDataRetention::sendMessageMetadata("", "received", location, attachment, sender, composeTime, currentTime);
     }
-    cJSON_DeleteItemFromObject(attributesRoot, RAP);
-    cJSON_DeleteItemFromObject(attributesRoot, RAM);
-    cJSON_DeleteItemFromObject(attributesRoot, ROP);
-    cJSON_DeleteItemFromObject(attributesRoot, ROM);
-    cJSON_AddNumberToObject(attributesRoot, DR_STATUS_BITS, drFlagsMask);
+    attachmentsJson.erase(RAP);
+    attachmentsJson.erase(RAM);
+    attachmentsJson.erase(ROP);
+    attachmentsJson.erase(ROM);
+    attachmentsJson[DR_STATUS_BITS] = drFlagsMask;
 
-    char *out = cJSON_PrintUnformatted(attributesRoot);
-    string messageAttrib(out);
-    free(out);
+    string messageAttrib(attachmentsJson.dump());
 
     plainMsgInfo->queueInfo_supplement = createSupplementString(attachmentDescr, messageAttrib);
     LOGGER(DEBUGGING, __func__, " <--");
@@ -646,15 +621,12 @@ void AppInterfaceImpl::sendDeliveryReceipt(const CmdQueueInfo &plainMsgInfo)
         LOGGER(DEBUGGING, __func__, " <-- no delivery receipt");
         return;
     }
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* attributeJson = sharedRoot.get();
+    json jsn;
 
-    cJSON_AddStringToObject(attributeJson, MSG_COMMAND, DELIVERY_RECEIPT);
-    cJSON_AddStringToObject(attributeJson, DELIVERY_TIME, Utilities::currentTimeISO8601().c_str());
-    char *out = cJSON_PrintUnformatted(attributeJson);
+    jsn[MSG_COMMAND] = DELIVERY_RECEIPT;
+    jsn[DELIVERY_TIME] = Utilities::currentTimeISO8601();
 
-    string command(out);
-    free(out);
+    string command(jsn.dump());
 
     string sender;
     string msgId;
@@ -677,20 +649,12 @@ void AppInterfaceImpl::sendDeliveryReceipt(const CmdQueueInfo &plainMsgInfo)
 void AppInterfaceImpl::sendErrorCommand(const string& error, const string& sender, const string& msgId)
 {
     LOGGER(DEBUGGING, __func__, " -->");
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* attributeJson = sharedRoot.get();
+    json jsn;
 
-    cJSON_AddStringToObject(attributeJson, MSG_COMMAND, error.c_str());
-    cJSON_AddStringToObject(attributeJson, COMMAND_TIME, Utilities::currentTimeISO8601().c_str());
-//    cJSON_AddBoolToObject(attributeJson, ROP, false);
-//    cJSON_AddBoolToObject(attributeJson, ROM, false);
-//    cJSON_AddBoolToObject(attributeJson, RAP, true);
-//    cJSON_AddBoolToObject(attributeJson, RAM, true);
+    jsn[MSG_COMMAND] = error;
+    jsn[COMMAND_TIME] = Utilities::currentTimeISO8601();
 
-    char *out = cJSON_PrintUnformatted(attributeJson);
-
-    string command(out);
-    free(out);
+    string command(jsn.dump());
 
     int32_t result;
     auto preparedMsgData = prepareMessageInternal(createMessageDescriptor(sender, msgId), Empty, command, false, MSG_DEC_FAILED, &result);
@@ -702,3 +666,5 @@ void AppInterfaceImpl::sendErrorCommand(const string& error, const string& sende
     doSendMessages(extractTransportIds(preparedMsgData.get()));
     LOGGER(DEBUGGING, __func__, " <-- ", command);
 }
+
+#pragma clang diagnostic pop

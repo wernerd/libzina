@@ -30,38 +30,7 @@ limitations under the License.
 
 using namespace std;
 using namespace zina;
-
-shared_ptr<list<shared_ptr<PreparedMessageData> > >
-AppInterfaceImpl::prepareMessage(const string& messageDescriptor,
-                                 const string& attachmentDescriptor,
-                                 const string& messageAttributes, bool normalMsg, int32_t* result)
-{
-    auto resultList = prepareMessageInternal(messageDescriptor, attachmentDescriptor, messageAttributes, false,
-                                             normalMsg ? MSG_NORMAL : MSG_CMD, result);
-
-    auto returnList = make_shared<list<shared_ptr<PreparedMessageData> > >();
-    for (; !resultList->empty(); resultList->pop_front()) {
-        auto msgData = shared_ptr<PreparedMessageData>(resultList->front().release());
-        returnList->push_back(msgData);
-    }
-    return returnList;
-}
-
-shared_ptr<list<shared_ptr<PreparedMessageData> > >
-AppInterfaceImpl::prepareMessageToSiblings(const string &messageDescriptor,
-                                           const string &attachmentDescriptor,
-                                           const string &messageAttributes, bool normalMsg, int32_t *result)
-{
-    auto resultList = prepareMessageInternal(messageDescriptor, attachmentDescriptor, messageAttributes, true,
-                                             normalMsg ? MSG_NORMAL : MSG_CMD, result);
-
-    auto returnList = make_shared<list<shared_ptr<PreparedMessageData> > >();
-    for (; !resultList->empty(); resultList->pop_front()) {
-        auto msgData = shared_ptr<PreparedMessageData>(resultList->front().release());
-        returnList->push_back(msgData);
-    }
-    return returnList;
-}
+using json = nlohmann::json;
 
 unique_ptr<list<unique_ptr<PreparedMessageData> > >
 AppInterfaceImpl::prepareMessageNormal(const string &messageDescriptor,
@@ -139,7 +108,7 @@ AppInterfaceImpl::addSiblingDevices(shared_ptr<list<string> > idDevInfos)
 
     if (idDevInfos->empty()) {
         // Add all devices known to server to id key list
-        for (auto siblingDevice : siblingDevices) {
+        for (const auto& siblingDevice : siblingDevices) {
             // Don't add own device to unknown siblings
             if (siblingDevice.first == scClientDevId_)
                 continue;
@@ -151,7 +120,7 @@ AppInterfaceImpl::addSiblingDevices(shared_ptr<list<string> > idDevInfos)
     // This is a nested loop. We could optimize the inner loop an remove
     // found devices. However, we are talking about max 5 entries in each
     // list, thus this optimization is not really necessary.
-    for (auto siblingDevice : siblingDevices) {
+    for (const auto& siblingDevice : siblingDevices) {
         // Don't add own device to unknown siblings
         if (siblingDevice.first == scClientDevId_)
             continue;
@@ -389,7 +358,7 @@ AppInterfaceImpl::prepareMessageInternal(const string& messageDescriptor,
         counter++;
 
         // Prepare the return data structure and fill into list
-        auto resultData = unique_ptr<PreparedMessageData>(new PreparedMessageData);
+        auto resultData = make_unique<PreparedMessageData>();
         resultData->transportId = msgInfo->queueInfo_transportMsgId;
         resultData->receiverInfo = idDevInfo;
         messageData->push_back(move(resultData));
@@ -414,22 +383,17 @@ AppInterfaceImpl::prepareMessageInternal(const string& messageDescriptor,
 
 string  AppInterfaceImpl::createSendErrorJson(const CmdQueueInfo& info, int32_t errorCode)
 {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "version", 1);
+    json jsn;
+    jsn["version"] = 1;
 
-    cJSON* details;
-    cJSON_AddItemToObject(root, "details", details = cJSON_CreateObject());
+    json details;
+    details["name"] = info.queueInfo_recipient;
+    details["scClientDevId"] = info.queueInfo_deviceId;
+    details["msgId"] = info.queueInfo_msgId;   // May help to diagnose the issue
+    details["errorCode"] = errorCode;
 
-    cJSON_AddStringToObject(details, "name", info.queueInfo_recipient.c_str());
-    cJSON_AddStringToObject(details, "scClientDevId", info.queueInfo_deviceId.c_str());
-    cJSON_AddStringToObject(details, "msgId", info.queueInfo_msgId.c_str());   // May help to diagnose the issue
-    cJSON_AddNumberToObject(details, "errorCode", errorCode);
-
-    char *out = cJSON_PrintUnformatted(root);
-    string retVal(out);
-    cJSON_Delete(root); free(out);
-
-    return retVal;
+    jsn["details"] = details;
+    return jsn.dump();
 }
 
 int32_t AppInterfaceImpl::doSendMessages(shared_ptr<vector<uint64_t> > transportIds)
@@ -515,7 +479,7 @@ AppInterfaceImpl::sendMessageExisting(const CmdQueueInfo &sendInfo, unique_ptr<Z
         }
     }
 
-    cJSON* convJson = nullptr;
+    JSONUnique convJson = nullptr;
     LOGGER_BEGIN(INFO)
         convJson = zinaConversation->prepareForCapture(nullptr, true);
     LOGGER_END
@@ -528,13 +492,8 @@ AppInterfaceImpl::sendMessageExisting(const CmdQueueInfo &sendInfo, unique_ptr<Z
     Utilities::wipeString(supplements);
 
     LOGGER_BEGIN(INFO)
-        convJson = zinaConversation->prepareForCapture(convJson, false);
-
-        char* out = cJSON_PrintUnformatted(convJson);
-        string convState(out);
-        cJSON_Delete(convJson); free(out);
-
-        MessageCapture::captureSendMessage(sendInfo.queueInfo_recipient, sendInfo.queueInfo_msgId, sendInfo.queueInfo_deviceId, convState,
+        convJson = zinaConversation->prepareForCapture(move(convJson), false);
+        MessageCapture::captureSendMessage(sendInfo.queueInfo_recipient, sendInfo.queueInfo_msgId, sendInfo.queueInfo_deviceId, convJson->dump(),
                                            sendInfo.queueInfo_attributes, !sendInfo.queueInfo_attachment.empty(), *store_);
     LOGGER_END
 
@@ -656,18 +615,15 @@ AppInterfaceImpl::sendMessageNewUser(const CmdQueueInfo &sendInfo)
 
 string AppInterfaceImpl::createMessageDescriptor(const string& recipient, const string& msgId, const string& msg)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
+    json jsn;
 
-    cJSON_AddStringToObject(root, MSG_VERSION, "1");
-    cJSON_AddStringToObject(root, MSG_RECIPIENT, recipient.c_str());
-    cJSON_AddStringToObject(root, MSG_ID, msgId.c_str());
-    cJSON_AddStringToObject(root, MSG_DEVICE_ID, scClientDevId_.c_str());
-    cJSON_AddStringToObject(root, MSG_MESSAGE, msg.empty() ? "" : msg.c_str());
+    jsn[MSG_VERSION] = "1";
+    jsn[MSG_RECIPIENT] = recipient;
+    jsn[MSG_ID] = msgId;
+    jsn[MSG_DEVICE_ID] = scClientDevId_;
+    jsn[MSG_MESSAGE] = msg.empty() ? "" : msg;
 
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string result(out.get());
-    return result;
+    return jsn.dump();
 }
 
 #ifdef SC_ENABLE_DR_SEND

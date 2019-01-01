@@ -1846,7 +1846,7 @@ JNI_FUNCTION(removeUser)(JNIEnv *env, jclass clazz, jstring groupUuid, jbyteArra
     if (!arrayToString(env, userId, &usr)) {
         return GROUP_MSG_DATA_INCONSISTENT;
     }
-    return zinaAppInterface->removeUser(group, usr);
+    return zinaAppInterface->removeUser(group, usr, false);
 }
 
 /*

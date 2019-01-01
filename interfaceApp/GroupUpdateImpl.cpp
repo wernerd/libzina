@@ -585,7 +585,7 @@ int32_t AppInterfaceImpl::processLeaveGroup(const string &groupId, const string 
     return deleteGroupAndMembers(groupId);
 }
 
-int32_t AppInterfaceImpl::removeUser(const string& groupId, const string& userId, bool allowOwnUser)
+int32_t AppInterfaceImpl::removeUser(const string& groupId, const string& userId, bool allowOwnUser = false)
 {
     LOGGER(DEBUGGING, __func__, " -->");
 

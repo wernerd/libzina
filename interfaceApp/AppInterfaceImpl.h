@@ -112,10 +112,11 @@ class AppInterfaceImpl : public AppInterface
 {
 public:
 #ifdef UNITTESTS
-    explicit AppInterfaceImpl(SQLiteStoreConv* store) : AppInterface(), tempBuffer_(NULL), store_(store), transport_(NULL) {}
+    explicit AppInterfaceImpl(SQLiteStoreConv* store) : AppInterface(), tempBuffer_(nullptr), store_(store), transport_(
+            nullptr) {}
     AppInterfaceImpl(SQLiteStoreConv* store, const std::string& ownUser, const std::string& authorization, const std::string& scClientDevId) :
-                    AppInterface(), tempBuffer_(NULL), tempBufferSize_(0), ownUser_(ownUser), authorization_(authorization),
-                    scClientDevId_(scClientDevId), store_(store), transport_(NULL), siblingDevicesScanned_(false),
+                    AppInterface(), tempBuffer_(nullptr), tempBufferSize_(0), ownUser_(ownUser), authorization_(authorization),
+                    scClientDevId_(scClientDevId), store_(store), transport_(nullptr), siblingDevicesScanned_(false),
                     drLrmm_(false), drLrmp_(false), drLrap_(false), drBldr_(false), drBlmr_(false), drBrdr_(false), drBrmr_(false) {}
 #endif
     AppInterfaceImpl(const std::string& ownUser, const std::string& authorization, const std::string& scClientDevId,
@@ -123,101 +124,89 @@ public:
                      GROUP_MSG_RECV_FUNC groupMsgCallback, GROUP_CMD_RECV_FUNC groupCmdCallback,
                      GROUP_STATE_FUNC groupStateCallback);
 
-    ~AppInterfaceImpl();
+    ~AppInterfaceImpl() override;
 
     // Documentation see AppInterface.h
-    void setTransport(Transport* transport) { transport_ = transport; }
+    void setTransport(Transport* transport) override{ transport_ = transport; }
 
-    Transport* getTransport()               { return transport_; }
+    Transport* getTransport() override              { return transport_; }
 
-    int32_t receiveMessage(const std::string& messageEnvelope, const std::string& uid, const std::string& displayName);
+    int32_t receiveMessage(const std::string& messageEnvelope, const std::string& uid, const std::string& displayName) override;
 
-    std::string* getKnownUsers();
+    std::string* getKnownUsers() override;
 
-    std::string getOwnIdentityKey();
+    std::string getOwnIdentityKey() override;
 
-    std::shared_ptr<std::list<std::string> > getIdentityKeys(std::string& user);
+    std::shared_ptr<std::list<std::string> > getIdentityKeys(std::string& user) override;
 
-    int32_t registerZinaDevice(std::string* result);
+    int32_t registerZinaDevice(std::string* result) override;
 
     int32_t removeZinaDevice(std::string& scClientDevId, std::string* result);
 
-    int32_t newPreKeys(int32_t number);
+    int32_t newPreKeys(int32_t number) override;
 
-    void addMsgInfoToRunQueue(std::unique_ptr<CmdQueueInfo> messageToProcess);
+    void addMsgInfoToRunQueue(std::unique_ptr<CmdQueueInfo> messageToProcess) override;
 
-    int32_t getNumPreKeys() const;
+    int32_t getNumPreKeys() const override;
 
-    void rescanUserDevices(const std::string& userName);
+    void rescanUserDevices(const std::string& userName) override;
 
-    void reKeyAllDevices(const std::string &userName);
+    void reKeyAllDevices(const std::string &userName) override;
 
-    void reKeyDevice(const std::string &userName, const std::string &deviceId);
+    void reKeyDevice(const std::string &userName, const std::string &deviceId) override;
 
-    void setIdKeyVerified(const std::string& userName, const std::string& deviceId, bool flag);
+    void setIdKeyVerified(const std::string& userName, const std::string& deviceId, bool flag) override;
 
-    std::string createNewGroup(const std::string& groupName, std::string& groupDescription);
+    std::string createNewGroup(const std::string& groupName, std::string& groupDescription) override;
 
-    bool modifyGroupSize(const std::string& groupId, int32_t newSize);
+    bool modifyGroupSize(const std::string& groupId, int32_t newSize) override;
 
-    int32_t setGroupName(const std::string& groupUuid, const std::string* groupName);
+    int32_t setGroupName(const std::string& groupUuid, const std::string* groupName) override;
 
-    int32_t setGroupBurnTime(const std::string& groupUuid, uint64_t burnTime, int32_t mode);
+    int32_t setGroupBurnTime(const std::string& groupUuid, uint64_t burnTime, int32_t mode) override;
 
-    int32_t setGroupAvatar(const std::string& groupUuid, const std::string* avatar);
+    int32_t setGroupAvatar(const std::string& groupUuid, const std::string* avatar) override;
 
-    int32_t addUser(const std::string& groupUuid, const std::string& userId);
+    int32_t addUser(const std::string& groupUuid, const std::string& userId) override;
 
-    int32_t removeUserFromAddUpdate(const std::string& groupUuid, const std::string& userId);
+    int32_t removeUserFromAddUpdate(const std::string& groupUuid, const std::string& userId) override;
 
-    int32_t cancelGroupChangeSet(const std::string& groupUuid);
+    int32_t cancelGroupChangeSet(const std::string& groupUuid) override;
 
-    int32_t applyGroupChangeSet(const std::string& groupId);
+    int32_t applyGroupChangeSet(const std::string& groupId) override;
 
-    int32_t sendGroupMessage(const std::string& messageDescriptor, const std::string& attachmentDescriptor, const std::string& messageAttributes);
+    int32_t sendGroupMessage(const std::string& messageDescriptor, const std::string& attachmentDescriptor, const std::string& messageAttributes) override;
 
     int32_t sendGroupMessageToMember(const std::string &messageDescriptor, const std::string &attachmentDescriptor,
                                      const std::string &messageAttributes, const std::string &recipient,
-                                     const std::string &deviceId);
+                                     const std::string &deviceId) override;
 
     int32_t sendGroupCommandToMember(const std::string& groupId, const std::string &member, const std::string &msgId,
-                                     const std::string &command);
+                                     const std::string &command) override;
 
-    int32_t leaveGroup(const std::string& groupId);
+    int32_t leaveGroup(const std::string& groupId) override;
 
-    int32_t removeUser(const std::string& groupId, const std::string& userId, bool allowOwnUser = false);
+    int32_t removeUser(const std::string& groupId, const std::string& userId, bool allowOwnUser) override;
 
-    int32_t removeUserFromRemoveUpdate(const std::string& groupUuid, const std::string& userId);
+    int32_t removeUserFromRemoveUpdate(const std::string& groupUuid, const std::string& userId) override;
 
-    int32_t burnGroupMessage(const std::string& groupId, const std::vector<std::string>& messageIds);
-
-    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<PreparedMessageData> > >
-    prepareMessage(const std::string& messageDescriptor,
-                   const std::string& attachmentDescriptor,
-                   const std::string& messageAttributes,
-                   bool normalMsg, int32_t* result);
-
-    DEPRECATED_ZINA std::shared_ptr<std::list<std::shared_ptr<PreparedMessageData> > >
-    prepareMessageToSiblings(const std::string &messageDescriptor,
-                             const std::string &attachmentDescriptor,
-                             const std::string &messageAttributes,
-                             bool normalMsg, int32_t *result);
+    int32_t burnGroupMessage(const std::string& groupId, const std::vector<std::string>& messageIds) override;
 
     std::unique_ptr<std::list<std::unique_ptr<PreparedMessageData> > >
     prepareMessageNormal(const std::string &messageDescriptor,
                          const std::string &attachmentDescriptor,
                          const std::string &messageAttributes,
-                         bool normalMsg, int32_t *result);
+                         bool normalMsg, int32_t *result) override;
 
     std::unique_ptr<std::list<std::unique_ptr<PreparedMessageData> > >
     prepareMessageSiblings(const std::string &messageDescriptor,
                            const std::string &attachmentDescriptor,
                            const std::string &messageAttributes,
-                           bool normalMsg, int32_t *result);
+                           bool normalMsg, int32_t *result) override;
 
-    int32_t doSendMessages(std::shared_ptr<std::vector<uint64_t> > transportIds);
+    int32_t doSendMessages(std::shared_ptr<std::vector<uint64_t> > transportIds) override;
 
-    int32_t removePreparedMessages(std::shared_ptr<std::vector<uint64_t> > transportIds);
+    int32_t removePreparedMessages(std::shared_ptr<std::vector<uint64_t> > transportIds) override;
 
     // **** Below are methods for this implementation, not part of AppInterface.h
     /**
@@ -238,7 +227,7 @@ public:
     /**
      * @brief Get name of local user for this Axolotl conversation.
      */
-    const std::string& getOwnUser() const         { return ownUser_; }
+    const std::string& getOwnUser() const override         { return ownUser_; }
 
     /**
      * @brief Get authorization data of local user.
@@ -249,7 +238,7 @@ public:
      * @brief Get own device identifier.
      * @return Reference to own device identifier string
      */
-    const std::string& getOwnDeviceId() const     { return scClientDevId_; }
+    const std::string& getOwnDeviceId() const override    { return scClientDevId_; }
 
     /**
      * @brief Return the stored error information.

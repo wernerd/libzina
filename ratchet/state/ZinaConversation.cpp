@@ -528,61 +528,61 @@ void ZinaConversation::reset()
 }
 
 
-cJSON *ZinaConversation::prepareForCapture(cJSON *existingRoot, bool beforeAction) {
+JSONUnique
+ZinaConversation::prepareForCapture(JSONUnique existingRoot, bool beforeAction) {
     LOGGER(DEBUGGING, __func__, " -->");
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-    cJSON* root = (existingRoot == nullptr) ? cJSON_CreateObject() : existingRoot;
+    JSONUnique root = (existingRoot == nullptr) ? make_unique<nlohmann::json>() : move(existingRoot);
 
-    cJSON* jsonItem;
-    cJSON_AddItemToObject(root, beforeAction ? "before" : "after", jsonItem = cJSON_CreateObject());
+    nlohmann::json jsonItem;
 
-    cJSON_AddStringToObject(jsonItem, "name", partner_.getName().c_str());
-    cJSON_AddStringToObject(jsonItem, "alias", partner_.getAlias().c_str());
+    jsonItem["name"] = partner_.getName();
+    jsonItem["alias"] = partner_.getAlias();
 
-    cJSON_AddStringToObject(jsonItem, "deviceId", deviceId_.c_str());
-    cJSON_AddStringToObject(jsonItem, "localUser", localUser_.c_str());
-    cJSON_AddStringToObject(jsonItem, "deviceName", deviceName_.c_str());
+    jsonItem["deviceId"] = deviceId_;
+    jsonItem["localUser"] = localUser_;
+    jsonItem["deviceName"] = deviceName_;
 
-    if (DHRs != NULL) {
+    if (DHRs != nullptr) {
         b64Encode((const uint8_t*)DHRs->getPublicKey().serialize().data(), DHRs->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "DHRs", b64Buffer);
+        jsonItem["DHRs"] =  b64Buffer;
     }
     else
-        cJSON_AddStringToObject(jsonItem, "DHRs", "");
+        jsonItem["DHRs"] = "";
 
     // DHRr key, public
-    if (DHRr != NULL) {
+    if (DHRr != nullptr) {
         b64Encode((const uint8_t*)DHRr->serialize().data(), DHRr->getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "DHRr", b64Buffer);
+        jsonItem["DHRr"] = b64Buffer;
     }
     else
-        cJSON_AddStringToObject(jsonItem, "DHRr", "");
+        jsonItem["DHRr"] = "";
 
     // DHIs key, public
-    if (DHIs != NULL) {
+    if (DHIs != nullptr) {
         b64Encode((const uint8_t*)DHIs->getPublicKey().serialize().data(), DHIs->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "DHIs", b64Buffer);
+        jsonItem["DHIs"] = b64Buffer;
     }
     else
-        cJSON_AddStringToObject(jsonItem, "DHIs", "");
+        jsonItem["DHIs"] = "";
 
     // DHIr key, public
-    if (DHIr != NULL) {
+    if (DHIr != nullptr) {
         b64Encode((const uint8_t*)DHIr->serialize().data(), DHIr->getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "DHIr", b64Buffer);
+        jsonItem["DHIr"] = b64Buffer;
     }
     else
-        cJSON_AddStringToObject(jsonItem, "DHIr", "");
+        jsonItem["DHIr"] = "";
 
 
     // A0 key, public
-    if (A0 != NULL) {
+    if (A0 != nullptr) {
         b64Encode((const uint8_t*)A0->getPublicKey().serialize().data(), A0->getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        cJSON_AddStringToObject(jsonItem, "A0", b64Buffer);
+        jsonItem["A0"] = b64Buffer;
     }
     else
-        cJSON_AddStringToObject(jsonItem, "A0", "");
+        jsonItem["A0"] = "";
 
     // The two chain keys, enable only if needed to do error analysis
 //    b64Encode((const uint8_t*)CKs.data(), CKs.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
@@ -591,11 +591,13 @@ cJSON *ZinaConversation::prepareForCapture(cJSON *existingRoot, bool beforeActio
 //    b64Encode((const uint8_t*)CKr.data(), CKr.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
 //    cJSON_AddStringToObject(root, "CKr", b64Buffer);
 
-    cJSON_AddNumberToObject(jsonItem, "Ns", Ns);
-    cJSON_AddNumberToObject(jsonItem, "Nr", Nr);
-    cJSON_AddNumberToObject(jsonItem, "PNs", PNs);
-    cJSON_AddNumberToObject(jsonItem, "ratchet", (ratchetFlag) ? 1 : 0);
-    cJSON_AddNumberToObject(jsonItem, "zrtpState", zrtpVerifyState);
+    jsonItem["Ns"] = Ns;
+    jsonItem["Nr"] = Nr;
+    jsonItem["PNs"] = PNs;
+    jsonItem["ratchet"] = (ratchetFlag) ? 1 : 0;
+    jsonItem["zrtpState"] = zrtpVerifyState;
+
+    root->emplace(beforeAction ? "before" : "after", jsonItem);
 
     LOGGER(DEBUGGING, __func__, " <--");
     return root;

@@ -242,7 +242,7 @@ public:
      * @return a pointer to the created/used cJSON structure. The caller is responsible to
      *         free the pointer.
      */
-    cJSON* prepareForCapture(cJSON* existingRoot, bool beforeAction);
+    JSONUnique prepareForCapture(JSONUnique existingRoot, bool beforeAction);
 
 #ifdef UNITTESTS
     const std::string* dump() const         { return serialize(); }

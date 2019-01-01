@@ -252,22 +252,22 @@ TEST_F(ChangeSetTestsFixtureMembers, RemoveMemberTests) {
     ASSERT_TRUE((bool)changeSet);
     ASSERT_FALSE(changeSet->has_updatermmember());
 
-    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(Empty, Empty));
-    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(groupId, Empty));
-    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(Empty, otherMemberId_1));
+    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(Empty, Empty, false));
+    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(groupId, Empty, false));
+    ASSERT_EQ(DATA_MISSING, appInterface_1->removeUser(Empty, otherMemberId_1, false));
 
-    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_1));
+    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_1, false));
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(1, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(otherMemberId_1, changeSet->updatermmember().rmmember(0).user_id());
 
-    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2));
+    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2, false));
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(2, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(otherMemberId_2, changeSet->updatermmember().rmmember(1).user_id());
 
     // removing a name a second time, ignore silently, no changes in change set
-    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2));
+    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2, false));
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(2, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(otherMemberId_2, changeSet->updatermmember().rmmember(1).user_id());
@@ -292,7 +292,7 @@ TEST_F(ChangeSetTestsFixtureMembers, AddRemoveMemberTests) {
 
     // Now remove the first added member
     // expect that it is in remove update, and removed from add update thus it is down to 2
-    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, memberId_1));
+    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, memberId_1, false));
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(1, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(memberId_1, changeSet->updatermmember().rmmember(0).user_id());
@@ -303,7 +303,7 @@ TEST_F(ChangeSetTestsFixtureMembers, AddRemoveMemberTests) {
     ASSERT_EQ(otherMemberId_1, changeSet->updateaddmember().addmember(1).user_id());
 
     // Now remove another member
-    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2));
+    ASSERT_EQ(SUCCESS, appInterface_1->removeUser(groupId, otherMemberId_2, false));
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(2, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(otherMemberId_2, changeSet->updatermmember().rmmember(1).user_id());
@@ -470,7 +470,7 @@ TEST_F(ChangeSetTestsFixtureMembers, CreateChangeSetTests) {
     ASSERT_EQ(otherMemberId_2, changeSet->updateaddmember().addmember(0).user_id());
 
     // Now remove a known member (not myself)
-    appInterface_1->removeUser(groupId, otherMemberId_1);
+    appInterface_1->removeUser(groupId, otherMemberId_1, false);
     ASSERT_TRUE(changeSet->has_updatermmember());
     ASSERT_EQ(1, changeSet->updatermmember().rmmember_size());
     ASSERT_EQ(otherMemberId_1, changeSet->updatermmember().rmmember(0).user_id());

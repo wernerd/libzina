@@ -32,150 +32,119 @@ limitations under the License.
 using namespace std;
 using namespace zina;
 using namespace vectorclock;
+using json = nlohmann::json;
 
-static void fillMemberArray(cJSON* root, const list<string> &members)
+
+static void
+fillMemberArray(json& root, const list<string> &members)
 {
-    cJSON* memberArray;
-    cJSON_AddItemToObject(root, MEMBERS, memberArray = cJSON_CreateArray());
-
+    json memberArray = json::array();
     for (const auto &member : members) {
-        cJSON_AddItemToArray(memberArray, cJSON_CreateString(member.c_str()));
+        memberArray += member;
     }
+    root[MEMBERS] += memberArray;
 }
 
-static string prepareMemberList(const string &groupId, const list<string> &members, const char *command, const struct timeval&  stamp, const string& userId) {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-
-    cJSON_AddStringToObject(root, GROUP_COMMAND, command);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+static string
+prepareMemberList(const string &groupId, const list<string> &members, const char *command, const struct timeval&  stamp, const string& userId)
+{
+    json jsn;
+    jsn[GROUP_COMMAND] = command;
+    jsn[GROUP_ID] = groupId;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
     if (!userId.empty()) {
-        cJSON_AddStringToObject(root, MEMBER_ID, userId.c_str());
+        jsn[MEMBER_ID] = userId;
     }
 
-    fillMemberArray(root, members);
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string listCommand(out.get());
-
-    return listCommand;
+    fillMemberArray(jsn, members);
+    return jsn.dump();
 }
 
 static string leaveCommand(const string& groupId, const string& memberId, const struct timeval&  stamp)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, LEAVE);
-    cJSON_AddStringToObject(root, MEMBER_ID, memberId.c_str());
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    json jsn;
+    jsn[GROUP_COMMAND] = LEAVE;
+    jsn[MEMBER_ID] = memberId;
+    jsn[GROUP_ID] = groupId;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
 
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static string newGroupCommand(const string& groupId, int32_t maxMembers, const struct timeval& stamp)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, NEW_GROUP);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddNumberToObject(root, GROUP_MAX_MEMBERS, maxMembers);
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    json jsn;
+    jsn[GROUP_COMMAND] = NEW_GROUP;
+    jsn[GROUP_ID] = groupId;
+    jsn[GROUP_MAX_MEMBERS] = maxMembers;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
 
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static string newGroupNameCommand(const string& groupId, const string& groupName, const struct timeval&  stamp, const string& userId)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, NEW_NAME);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddStringToObject(root, GROUP_NAME, groupName.c_str());
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    json jsn;
+    jsn[GROUP_COMMAND] = NEW_NAME;
+    jsn[GROUP_ID] = groupId;
+    jsn[GROUP_NAME] = groupName;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
     if (!userId.empty()) {
-        cJSON_AddStringToObject(root, MEMBER_ID, userId.c_str());
+        jsn[MEMBER_ID] = userId;
     }
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static string newGroupAvatarCommand(const string& groupId, const string& groupAvatar, const struct timeval&  stamp, const string& userId)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, NEW_AVATAR);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddStringToObject(root, GROUP_AVATAR, groupAvatar.c_str());
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    json jsn;
+    jsn[GROUP_COMMAND] = NEW_AVATAR;
+    jsn[GROUP_ID] = groupId;
+    jsn[GROUP_AVATAR] = groupAvatar;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
     if (!userId.empty()) {
-        cJSON_AddStringToObject(root, MEMBER_ID, userId.c_str());
+        jsn[MEMBER_ID] = userId;
     }
-
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static string newGroupBurnCommand(const string& groupId, int64_t burnTime, int32_t burnMode, const struct timeval&  stamp, const string& userId)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, NEW_BURN);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    cJSON_AddNumberToObject(root, GROUP_BURN_SEC, burnTime);
-    cJSON_AddNumberToObject(root, GROUP_BURN_MODE, burnMode);
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    json jsn;
+    jsn[GROUP_COMMAND] = NEW_BURN;
+    jsn[GROUP_ID] = groupId;
+    jsn[GROUP_BURN_SEC] = burnTime;
+    jsn[GROUP_BURN_MODE] = burnMode;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
     if (!userId.empty()) {
-        cJSON_AddStringToObject(root, MEMBER_ID, userId.c_str());
+        jsn[MEMBER_ID] = userId;
     }
-
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static string groupBurnMsgCommand(const string& groupId, const ::google::protobuf::RepeatedPtrField< ::std::string>& msgIds,
                                   const string& member, const struct timeval& stamp)
 {
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-    cJSON_AddStringToObject(root, GROUP_COMMAND, REMOVE_MSG);
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
+    json jsn;
+    jsn[GROUP_COMMAND] = REMOVE_MSG;
+    jsn[GROUP_ID] = groupId;
 
-    cJSON* idArray;
-    cJSON_AddItemToObject(root, MSG_IDS, idArray = cJSON_CreateArray());
-
+    json idArray = json::array();
     for (auto const &id : msgIds) {
-        cJSON_AddItemToArray(idArray, cJSON_CreateString(id.c_str()));
+        idArray += id;
     }
-    cJSON_AddStringToObject(root, MEMBER_ID, member.c_str());
-    cJSON_AddNumberToObject(root, COMMAND_TIME, stamp.tv_sec);
-    cJSON_AddNumberToObject(root, COMMAND_TIME_U, stamp.tv_usec);
+    jsn[MSG_IDS] = idArray;
+    jsn[MEMBER_ID] = member;
+    jsn[COMMAND_TIME] = stamp.tv_sec;
+    jsn[COMMAND_TIME_U] = stamp.tv_usec;
 
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string command(out.get());
-
-    return command;
+    return jsn.dump();
 }
 
 static int32_t serializeChangeSet(const GroupChangeSet& changeSet, string *attributes)
@@ -186,22 +155,19 @@ static int32_t serializeChangeSet(const GroupChangeSet& changeSet, string *attri
         return GENERIC_ERROR;
     }
     auto b64Size = static_cast<size_t>(serialized.size() * 2);
-    unique_ptr<char[]> b64Buffer(new char[b64Size]);
+    auto b64Buffer = make_unique<char[]>(b64Size);
+
     if (b64Encode(reinterpret_cast<const uint8_t *>(serialized.data()), serialized.size(), b64Buffer.get(), b64Size) == 0) {
         return GENERIC_ERROR;
     }
-
-    JsonUnique sharedRoot(cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-
     string serializedSet;
     serializedSet.assign(b64Buffer.get());
 
+    json jsn;
     if (!serializedSet.empty()) {
-        cJSON_AddStringToObject(root, GROUP_CHANGE_SET, serializedSet.c_str());
+        jsn[GROUP_CHANGE_SET] = serializedSet;
     }
-    CharUnique out(cJSON_PrintUnformatted(root));
-    attributes->assign(out.get());
+    attributes->assign(jsn.dump());
     return SUCCESS;
 }
 
@@ -255,14 +221,12 @@ int32_t AppInterfaceImpl::sendGroupMessage(const string &messageDescriptor, cons
         LOGGER(ERROR, __func__, " Wrong JSON data to send group message, error code: ", result);
         return result;
     }
-    JsonUnique sharedRoot(!messageAttributes.empty() ? cJSON_Parse(messageAttributes.c_str()) : cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
-
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-
-    char *out = cJSON_PrintUnformatted(root);
-    string newAttributes(out);
-    free(out);
+    json jsn;
+    if (!messageAttributes.empty()) {
+        jsn = json::parse(messageAttributes);
+    }
+    jsn[GROUP_ID] = groupId;
+    string newAttributes(jsn.dump());
 
     result = prepareChangeSetSend(groupId);
     if (result < 0) {
@@ -312,14 +276,13 @@ int32_t AppInterfaceImpl::sendGroupMessageToMember(const string &messageDescript
         LOGGER(ERROR, __func__, " Wrong JSON data to send group message, error code: ", result);
         return result;
     }
-    JsonUnique uniqueRoot(!messageAttributes.empty() ? cJSON_Parse(messageAttributes.c_str()) : cJSON_CreateObject());
-    cJSON* root = uniqueRoot.get();
 
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-
-    char *out = cJSON_PrintUnformatted(root);
-    string newAttributes(out);
-    free(out);
+    json jsn;
+    if (!messageAttributes.empty()) {
+        jsn = json::parse(messageAttributes);
+    }
+    jsn[GROUP_ID] = groupId;
+    string newAttributes(jsn.dump());
 
     result = prepareChangeSetSend(groupId);
     if (result < 0) {
@@ -401,10 +364,9 @@ int32_t AppInterfaceImpl::processGroupCommand(const string &msgDescriptor, strin
     if (commandIn->empty()) {
         return GROUP_CMD_MISSING_DATA;
     }
-    JsonUnique sharedRoot(cJSON_Parse(commandIn->c_str()));
-    cJSON* root = sharedRoot.get();
 
-    string groupCommand(Utilities::getJsonString(root, GROUP_COMMAND, ""));
+    json jsn = json::parse(*commandIn);
+    string groupCommand(jsn.value(GROUP_COMMAND, ""));
 
     // A command message may have a change set, process it
     int32_t result = checkAndProcessChangeSet(msgDescriptor, commandIn);
@@ -432,17 +394,16 @@ int32_t AppInterfaceImpl::checkAndProcessChangeSet(const string &msgDescriptor, 
 
     string changeSetString;
 
-    JsonUnique sharedRoot(cJSON_Parse(messageAttributes->c_str()));
-    cJSON* root = sharedRoot.get();
-    if (Utilities::hasJsonKey(root, GROUP_CHANGE_SET)) {
-        changeSetString = Utilities::getJsonString(root, GROUP_CHANGE_SET, "");
+    json jsn = json::parse(*messageAttributes);
+
+    if (jsn.find(GROUP_CHANGE_SET) != jsn.end()) {
+        changeSetString = jsn.value(GROUP_CHANGE_SET, "");
 
         // Remove the change set b64 data
-        cJSON_DeleteItemFromObject(root, GROUP_CHANGE_SET);
-        CharUnique out(cJSON_PrintUnformatted(root));
-        messageAttributes->assign(out.get());
+        jsn.erase(GROUP_CHANGE_SET);
+        messageAttributes->assign(jsn.dump());
     }
-    string groupId(Utilities::getJsonString(root, GROUP_ID, ""));
+    string groupId(jsn.value(GROUP_ID, ""));
     bool hasGroup = store_->hasGroup(groupId);
 
     // An early check to avoid JSON parsing. No change set to process and we know this group: just return SUCCESS
@@ -451,13 +412,12 @@ int32_t AppInterfaceImpl::checkAndProcessChangeSet(const string &msgDescriptor, 
     }
 
     // Get the message sender info
-    sharedRoot = JsonUnique(cJSON_Parse(msgDescriptor.c_str()));
-    root = sharedRoot.get();
-    string sender(Utilities::getJsonString(root, MSG_SENDER, ""));
-    string deviceId(Utilities::getJsonString(root, MSG_DEVICE_ID, ""));
+    jsn  = json::parse(msgDescriptor);
+    string sender(jsn.value(MSG_SENDER, ""));
+    string deviceId(jsn.value(MSG_DEVICE_ID, ""));
 
     uuid_t uu = {0};
-    uuid_parse(Utilities::getJsonString(root, MSG_ID, ""), uu);
+    uuid_parse(jsn.value(MSG_ID, "").c_str(), uu);
     struct timeval msgTime {0};
     uuid_time(uu, &msgTime);
 
@@ -1081,16 +1041,17 @@ int32_t AppInterfaceImpl::processUpdateMembers(const GroupChangeSet &changeSet, 
 
 int32_t AppInterfaceImpl::sendGroupMessageToSingleUserDeviceNoCS(const string &groupId, const string &userId,
                                                                  const string &deviceId, const string &attributes,
-                                                                 const string &msg, int32_t msgType)
-{
+                                                                 const string &msg, int32_t msgType) {
     LOGGER(DEBUGGING, __func__, " -->");
 
-    JsonUnique sharedRoot(!attributes.empty() ? cJSON_Parse(attributes.c_str()) : cJSON_CreateObject());
-    cJSON* root = sharedRoot.get();
+    // if attributes available add the group id to them
+    json jsn;
+    if (!attributes.empty()) {
+        jsn = json::parse(attributes);
+    }
 
-    cJSON_AddStringToObject(root, GROUP_ID, groupId.c_str());
-    CharUnique out(cJSON_PrintUnformatted(root));
-    string newAttributes(out.get());
+    jsn[GROUP_ID] =  groupId;
+    string newAttributes(jsn.dump());
 
     const string msgId = generateMsgIdTime();
 
