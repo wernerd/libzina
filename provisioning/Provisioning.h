@@ -32,7 +32,7 @@ limitations under the License.
 #include "../storage/sqlite/SQLiteStoreConv.h"
 
 namespace zina {
-    class Provisioning : KeyProvisioningServerApi {
+    class Provisioning {
     public:
         virtual ~Provisioning() = default;
 
@@ -74,8 +74,8 @@ namespace zina {
          *                  part as the second member.
          * @return a pre-key id or @c 0 on failure
          */
-        static KeyBundleUnique
-        getPreKeyBundle(const std::string &name, const std::string &longDevId, const std::string &authorization);
+//        static KeyBundleUnique
+//        getPreKeyBundle(const std::string &name, const std::string &longDevId, const std::string &authorization);
 
         /**
          * @brief Get number of available pre-keys on the server.
@@ -84,7 +84,7 @@ namespace zina {
          * @param authorization authorization data, may be needed for some servers
          * @return number of available pre-keys, -1 if request to server failed.
          */
-        static int32_t getNumPreKeys(const std::string &longDevId, const std::string &authorization);
+ //       static int32_t getNumPreKeys(const std::string &longDevId, const std::string &authorization);
 
         /**
          * @brief Get the available registered ZINA device of a user
@@ -115,9 +115,9 @@ namespace zina {
          * @param result To store the result data of the server, usually in case of an error only
          * @return the server's request return code, e.g. 200 or 404 or alike.
          */
-        static int32_t
-        newPreKeys(SQLiteStoreConv *store, const std::string &longDevId, const std::string &authorization,
-                   int32_t number, std::string *result);
+//        static int32_t
+//        newPreKeys(SQLiteStoreConv *store, const std::string &longDevId, const std::string &authorization,
+//                   int32_t number, std::string *result);
 
         static int32_t getUserInfo(const std::string &alias, const std::string &authorization, std::string *result);
     };

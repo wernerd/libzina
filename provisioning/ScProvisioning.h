@@ -36,29 +36,29 @@ static const std::string DELETE("DELETE");
 typedef int32_t (*HTTP_FUNC)(const std::string& requestUri, const std::string& method, const std::string& requestData, std::string* response);
 
 namespace zina {
-class ScProvisioning : public Provisioning
+class ScProvisioning : public Provisioning, public KeyProvisioningServerApi
 {
 public:
 
-    explicit ScProvisioning(std::string& authorization) : authorizationCode(authorization) {}
+    explicit ScProvisioning(const std::string& authorization) : authorizationCode(authorization) {}
 
     ~ScProvisioning() override = default;
 
     int32_t
     updateKeyBundle(const std::string& userId, const std::string& deviceId, const DhPublicKey& identity,
-                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingOnetimePreKeys,
-                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingSingedPreKeys,
-                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > newOneTimePreKeys,
-                    std::unique_ptr<PreKeyData> newSignedPreKey) override
+                    PreKeysListUnique existingOnetimePreKeys,
+                    PreKeysListUnique existingSingedPreKeys,
+                    PreKeysListUnique newOneTimePreKeys,
+                    PreKeyDataUnique newSignedPreKey) override
     {
-        return GENERIC_ERROR;
+        return newPreKeys_V2(deviceId, move(newOneTimePreKeys), nullptr);
     }
 
     KeyBundleUnique
-    getKeyBundle(const std::string& userId, const std::string& deviceId) override
-    {
-        return Provisioning::getPreKeyBundle(userId, deviceId, authorizationCode);
-    }
+    getKeyBundle(const std::string& userId, const std::string& deviceId) override;
+
+    int32_t
+    getNumberAvailableKeysOnServer(const std::string& userId, const std::string& deviceId) override;
 
     /**
      * @brief Initialization code must set a HTTP helper function
@@ -73,7 +73,7 @@ public:
 
 private:
 
-    std::string authorizationCode;
+    const std::string authorizationCode;
 
     friend class Provisioning;
     /**
@@ -95,6 +95,12 @@ private:
      * @return the request return code, usually a HTTP code like 200 or something like that.
      */
     static HTTP_FUNC httpHelper_;
+
+    int32_t
+    newPreKeys_V2(const std::string &longDevId,
+                  PreKeysListUnique newOneTimePreKeys,
+                  PreKeyDataUnique newSignedPreKey);
+
 
 };
 } // namespace

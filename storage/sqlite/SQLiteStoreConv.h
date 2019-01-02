@@ -215,7 +215,7 @@ public:
 
     int32_t storePreKey(int32_t preKeyId, const std::string& preKeyData, bool isSignedKey = false);
 
-    bool containsPreKey(int32_t preKeyId, int32_t* sqlCode = nullptr) const;
+    bool hasPreKey(int32_t preKeyId, int32_t *sqlCode = nullptr) const;
 
     int32_t removePreKey(int32_t preKeyId);
 

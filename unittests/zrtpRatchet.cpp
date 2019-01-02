@@ -42,25 +42,6 @@ static const uint8_t keyInData[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,
 
 static string emptySharedString;
 
-// Used in testing and debugging to do in-depth checks
-static void hexdump(const char* title, const unsigned char *s, size_t l) {
-    size_t n = 0;
-
-    if (s == NULL) return;
-
-    fprintf(stderr, "%s",title);
-    for( ; n < l ; ++n) {
-        if((n%16) == 0)
-            fprintf(stderr, "\n%04x", static_cast<int>(n));
-        fprintf(stderr, " %02x",s[n]);
-    }
-    fprintf(stderr, "\n");
-}
-static void hexdump(const char* title, const string& in)
-{
-    hexdump(title, (uint8_t*)in.data(), in.size());
-}
-
 class RatchetTestFixture: public ::testing::Test {
 public:
     RatchetTestFixture( ) {

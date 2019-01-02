@@ -1144,7 +1144,7 @@ cleanup:
     return sqlResult;
 }
 
-bool SQLiteStoreConv::containsPreKey(int32_t preKeyId, int32_t* sqlCode) const
+bool SQLiteStoreConv::hasPreKey(int32_t preKeyId, int32_t *sqlCode) const
 {
     sqlite3_stmt *stmt;
     int32_t sqlResult;

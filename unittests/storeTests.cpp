@@ -29,6 +29,7 @@ limitations under the License.
 #include "../interfaceApp/JsonStrings.h"
 #include "../Constants.h"
 #include "../keymanagment/PreKeys.h"
+#include "../keymanagment/KeyManagement.h"
 
 static const uint8_t keyInData[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,11,10,20,21,22,23,24,25,26,27,28,20,31,30};
 static const uint8_t keyInData_1[] = {0,1,2,3,4,5,6,7,8,9,19,18,17,16,15,14,13,12,11,10,20,21,22,23,24,25,26,27,28,20,31,32};
@@ -57,6 +58,19 @@ static string* preKeyJson(const DhKeyPair& preKeyPair)
 
     return data;
 }
+
+class MockServerApi : public KeyProvisioningServerApi {
+    int32_t
+    updateKeyBundle(const std::string& userId, const std::string& deviceId, const DhPublicKey& identity,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingOnetimePreKeys,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > existingSingedPreKeys,
+                    std::unique_ptr<std::list<std::unique_ptr<PreKeyData> > > newPreKeys,
+                    std::unique_ptr<PreKeyData> newSignedPreKey) override
+    {
+        return SUCCESS;
+    }
+};
+
 
 class StoreTestFixture: public ::testing::Test {
 public:
@@ -102,7 +116,7 @@ TEST_F(StoreTestFixture, PreKeyStore)
 
     result = pks->storePreKey(3, *pk);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
-    ASSERT_TRUE(pks->containsPreKey(3));
+    ASSERT_TRUE(pks->hasPreKey(3));
 
     result = pks->storePreKey(3, *pk);
     ASSERT_TRUE(result == SQLITE_CONSTRAINT) << pks->getLastError();
@@ -114,7 +128,7 @@ TEST_F(StoreTestFixture, PreKeyStore)
 
     result = pks->storePreKey(5, *pk);
     ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
-    ASSERT_TRUE(pks->containsPreKey(5));
+    ASSERT_TRUE(pks->hasPreKey(5));
 
     result = pks->countUnsignedPreKeys(&sqlCode);
     ASSERT_FALSE(SQL_FAIL(sqlCode)) << pks->getLastError();
@@ -126,35 +140,22 @@ TEST_F(StoreTestFixture, PreKeyStore)
     ASSERT_EQ(*pk, pk_1);
 
     pks->removePreKey(3);
-    ASSERT_FALSE(pks->containsPreKey(3));
+    ASSERT_FALSE(pks->hasPreKey(3));
 }
 
 TEST_F(StoreTestFixture, PreKeyGenerate)
 {
-    // generate and store a key pair
-    PreKeys::PreKeyData preKeyBundle = PreKeys::generatePreKey(pks);
+    // Need a public key pair here
+    const Ec255PublicKey baseKey_1(keyInData_1);
 
-    string pk_1;
-    int32_t result = pks->loadPreKey(preKeyBundle.keyId, pk_1);
-    ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
-    ASSERT_FALSE(pk_1.empty()) <<  "Generated key not found, " << pk_1 << endl;
-    auto parsedKey = PreKeys::parsePreKeyData(pk_1);
-    ASSERT_EQ(preKeyBundle.keyPair->getPublicKey(), parsedKey->getPublicKey());
-}
+    MockServerApi kspApi;
+    auto result = KeyManagement::addNewPreKeys(1,"", "", baseKey_1, kspApi, *pks);
+    ASSERT_EQ(SUCCESS, result);
 
-TEST_F(StoreTestFixture, PreKeyGenerateList)
-{
-    // generate and store a key pair
-    auto* preKeyList = PreKeys::generatePreKeys(pks);
-
-    string pk_1;
-    for (auto &preKey : *preKeyList ) {
-        int32_t result = pks->loadPreKey(preKey.keyId, pk_1);
-        ASSERT_FALSE(SQL_FAIL(result)) << pks->getLastError();
-        ASSERT_FALSE(pk_1.empty()) << "Generated key not found, " << pk_1 << endl;
-        auto parsedKey = PreKeys::parsePreKeyData(pk_1);
-        ASSERT_EQ(preKey.keyPair->getPublicKey(), parsedKey->getPublicKey());
-    }
+    list<PreKeyDataUnique>loadedKeys;
+    result = KeyManagement::getAllOneTimeFromDb(loadedKeys, *pks);
+    ASSERT_EQ(SUCCESS, result);
+    ASSERT_EQ(1, loadedKeys.size());
 }
 
 TEST_F(StoreTestFixture, MsgHashStore)

@@ -1,112 +1,119 @@
 /*
-Copyright 2016 Silent Circle, LLC
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * sZina Copyright 2018, Werner Dittmann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #include "PreKeys.h"
 
 #include "../ratchet/crypto/EcCurve.h"
-#include "../util/b64helper.h"
 #include "../util/Utilities.h"
 
 #include <cryptcommon/ZrtpRandom.h>
 
+
 using namespace std;
 using namespace zina;
-using json = nlohmann::json;
 
-static unique_ptr<string> preKeyJson(const DhKeyPair &preKeyPair)
+
+static PreKeyDataUnique generateKey(SQLiteStoreConv& store, bool isSigned = false)
 {
-    LOGGER(INFO, __func__, " -->");
-    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
-
-    json jsn;
-
-    b64Encode(preKeyPair.getPrivateKey().privateData(), preKeyPair.getPrivateKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    jsn["private"] = b64Buffer;
-
-    b64Encode((const uint8_t*)preKeyPair.getPublicKey().serialize().data(), preKeyPair.getPublicKey().getEncodedSize(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    jsn["public"] = b64Buffer;
-
-
-    LOGGER(DEBUGGING, __func__, " <--");
-    return make_unique<string>(jsn.dump());
-}
-
-PreKeys::PreKeyData PreKeys::generatePreKey(SQLiteStoreConv* store)
-{
-    LOGGER(DEBUGGING, __func__, " -->");
-
     int32_t keyId = 0;
     for (bool ok = false; !ok; ) {
         ZrtpRandom::getRandomData((uint8_t*)&keyId, sizeof(int32_t));
         keyId &= 0x7fffffff;      // always a positive value
-        ok = !store->containsPreKey(keyId);
+        if (keyId == 0) {
+            continue;
+        }
+        ok = !store.hasPreKey(keyId);
     }
-    KeyPairUnique preKeyPair = EcCurve::generateKeyPair(EcCurveTypes::Curve25519);
+    auto preKeyPair = EcCurve::generateKeyPair(EcCurveTypes::Curve25519);
+    auto preKeyData = make_unique<PreKeyData>(keyId, move(preKeyPair));
+    if (!preKeyData->keyPair) {
+        preKeyData->result = NO_SUCH_CURVE;
+    }
+    preKeyData->isSigned = isSigned;
+    preKeyData->created = time(nullptr);
 
-    // Create storage format (JSON) of pre-key and store it. Storage encrypts the JSON data
-    const auto pk = preKeyJson(*preKeyPair);
-    store->storePreKey(keyId, *pk);
-
-    PreKeyData prePair(keyId, move(preKeyPair));
-
-    LOGGER(DEBUGGING, __func__, " <--");
-    return prePair;
+   return preKeyData;
 }
 
-list<PreKeys::PreKeyData>* PreKeys::generatePreKeys(SQLiteStoreConv* store, int32_t num)
+PreKeyDataUnique
+PreKeys::generateOneTime(SQLiteStoreConv& store)
 {
     LOGGER(DEBUGGING, __func__, " -->");
-
-    auto* pkrList = new std::list<PreKeys::PreKeyData>;
-
-    for (int32_t i = 0; i < num; i++) {
-        PreKeys::PreKeyData pkPair = generatePreKey(store);
-        pkrList->push_back(move(pkPair));
-    }
-    LOGGER(DEBUGGING, __func__, " <--");
-    return pkrList;
+    return generateKey(store);
 }
 
-KeyPairUnique PreKeys::parsePreKeyData(const string& data) {
+int32_t 
+PreKeys::generateOneTimeKeys(std::list<PreKeyDataUnique>& keys, SQLiteStoreConv& store, int32_t num)
+{
     LOGGER(DEBUGGING, __func__, " -->");
-
-    char b64Buffer[MAX_KEY_BYTES_ENCODED * 2];   // Twice the max. size on binary data - b64 is times 1.5
-    uint8_t binBuffer[MAX_KEY_BYTES_ENCODED];
-
-    json jsn;
-    try {
-        jsn = json::parse(data);
-
-        if (jsn.find("public") == jsn.end() || jsn.find("private") == jsn.end()) {
-            return nullptr;
+    
+    for (int32_t i = 0; i < num; i++) {
+        auto pkData = generateOneTime(store);
+        if (pkData->result != SUCCESS) {
+            return pkData->result;      // bail out in case of error
         }
-    } catch (json::exception&) {
-        return KeyPairUnique(nullptr);
+        keys.push_back(move(pkData));
     }
-
-    string pub = jsn["public"];
-    b64Decode(pub.data(), pub.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
-    const PublicKeyUnique pubKey = EcCurve::decodePoint(binBuffer);
-
-    // Here we may check the public curve type and do some code to support different curves and
-    // create to correct private key. The serialized public key data contains a curve type id. For
-    // the time being use Ec255 (DJB's curve 25519).
-    string priv = jsn["private"];
-    size_t binLength = b64Decode(priv.data(), priv.size(), binBuffer, MAX_KEY_BYTES_ENCODED);
-    const PrivateKeyUnique privKey = EcCurve::decodePrivatePoint(binBuffer, binLength);
-
     LOGGER(DEBUGGING, __func__, " <--");
-    return KeyPairUnique(new DhKeyPair(*pubKey, *privKey));
+    return SUCCESS;
 }
+
+
+PreKeyDataUnique
+PreKeys::generateSigned(const DhPrivateKey &signingKey, SQLiteStoreConv& store)
+{
+#ifdef SIGNED_PRE_KEY_SUPPORT
+    auto preKeyData = generateKey(store, true);
+
+    uint8_t signature[Ec255PrivateKey::SIGN_LENGTH] = {0};
+
+    // serialize returns the public key as byte data: first byte is the key type,
+    // following bytes are the public key bytes
+    string encoded = preKeyData->keyPair->getPublicKey().serialize();
+
+    // Sign the encoded public key data
+    preKeyData->signature = make_unique<string>();
+    int32_t result = EcCurve::calculateSignature(signingKey, reinterpret_cast<const uint8_t*>(encoded.c_str()),
+                                                 encoded.size(), signature, Ec255PrivateKey::SIGN_LENGTH);
+    if (result != SUCCESS) {
+        preKeyData->signature->clear();
+        preKeyData->result = result;
+        return preKeyData;             // return with an empty signature
+    }
+    preKeyData->signature->assign(reinterpret_cast<const char*>(signature), Ec255PrivateKey::SIGN_LENGTH);
+#else
+    PreKeyDataUnique preKeyData;        // an empty pointer
+#endif
+    return preKeyData;
+}
+
+int32_t
+PreKeys::verifySigned(const DhPublicKey &verifyingKey, const DhPublicKey &signedKey, const string &signature)
+{
+#ifdef SIGNED_PRE_KEY_SUPPORT
+
+    // serialize() returns the public key as byte data: first byte is the key type, then the public key data
+    string encoded = signedKey.serialize();
+
+    // Now verify
+    return EcCurve::verifySignature(verifyingKey,
+                                    reinterpret_cast<const uint8_t*>(encoded.c_str()), encoded.size(),
+                                    reinterpret_cast<const uint8_t*>(signature.c_str()), Ec255PrivateKey::SIGN_LENGTH);
+#else
+    return GENERIC_ERROR;
+#endif
+}
+
+

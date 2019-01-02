@@ -20,6 +20,8 @@ limitations under the License.
 
 #include "../util/Utilities.h"
 #include "../provisioning/Provisioning.h"
+#include "../provisioning/ScProvisioning.h"
+#include "../keymanagment/KeyManagement.h"
 #include "../util/b64helper.h"
 #include "MessageEnvelope.pb.h"
 #include "../storage/MessageCapture.h"
@@ -580,7 +582,8 @@ AppInterfaceImpl::sendMessageNewUser(const CmdQueueInfo &sendInfo)
     }
 
 
-    auto keyBundle = Provisioning::getPreKeyBundle(sendInfo.queueInfo_recipient, sendInfo.queueInfo_deviceId, authorization_);
+    ScProvisioning provisioning(authorization_);
+    auto keyBundle = KeyManagement::getKeyBundleFromServer(sendInfo.queueInfo_recipient, sendInfo.queueInfo_deviceId, provisioning);
     if (keyBundle->preKeyId == 0) {
         LOGGER(ERROR, "No pre-key bundle available for recipient ", sendInfo.queueInfo_recipient, ", device id: ", sendInfo.queueInfo_deviceId);
         LOGGER(INFO, __func__, " <-- No pre-key bundle");

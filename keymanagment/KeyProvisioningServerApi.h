@@ -17,8 +17,8 @@
 // Created by Werner Dittmann on 11.11.18.
 //
 
-#ifndef SZINA_KEYPROVISIONINGSERVERAPI_H
-#define SZINA_KEYPROVISIONINGSERVERAPI_H
+#ifndef ZINA_KEYPROVISIONINGSERVERAPI_H
+#define ZINA_KEYPROVISIONINGSERVERAPI_H
 /**
  * @file
  * @brief Interface definition for key server functions 
@@ -104,9 +104,23 @@ namespace zina {
         {
             return nullptr;
         }
+
+        /**
+         * @brief Get the number of available one-time pre-keys that are available on the server.
+         *
+         * @param userId The user's identification, for example unique id, chat address, etc
+         * @param deviceId If multi-device feature is supported then this defines the specific device of the user. If the
+         *                 feature is not supported the parameter should be an empty string
+         * @return Number of available keys or @c GENERIC_ERROR in case the number cannot be determined.
+         */
+        virtual int32_t
+        getNumberAvailableKeysOnServer(const std::string& userId, const std::string& deviceId)
+        {
+            return -1;
+        }
     };
 }
 /**
  * @}
  */
-#endif //SZINA_KEYPROVISIONINGSERVERAPI_H
+#endif //ZINA_KEYPROVISIONINGSERVERAPI_H

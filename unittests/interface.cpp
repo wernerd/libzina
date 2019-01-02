@@ -24,6 +24,7 @@ limitations under the License.
 #include "../interfaceApp/AppInterfaceImpl.h"
 #include "../util/b64helper.h"
 #include "../keymanagment/PreKeys.h"
+#include "../keymanagment/KeyManagement.h"
 #include "../provisioning/ScProvisioning.h"
 
 #include "gtest/gtest.h"
@@ -104,9 +105,7 @@ static int32_t helper1(const std::string& requestUrl, const std::string& method,
 
     char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
 
-
     json jsn;
-
     json  axolotl;
 
     std::string data = bobIdpublicKey.serialize();
@@ -145,8 +144,9 @@ TEST(PreKeyBundle, Basic)
 //    }
     ScProvisioning::setHttpHelper(helper1);
 
-    auto keyBundle = Provisioning::getPreKeyBundle(bob, bobDevId, bobAuth);
-    
+    ScProvisioning provisioning(bobAuth);
+    auto keyBundle = KeyManagement::getKeyBundleFromServer(bob, bobDevId, provisioning);
+
     ASSERT_EQ(bobPreKey->keyId, keyBundle->preKeyId);
     ASSERT_TRUE(bobIdpublicKey == *static_cast<const Ec255PublicKey*>(keyBundle->identityKey.get()));
 }
@@ -290,8 +290,8 @@ TEST(newPreKeys, Basic)
         store->openStore(std::string());
     }
     ScProvisioning::setHttpHelper(helper5);
+    ScProvisioning provisioning(bobAuth);
 
-    std::string result;
-    int32_t ret = Provisioning::newPreKeys(store, bobDevId, bobAuth, 10, &result);
-    ASSERT_TRUE(ret > 0) << "Actual return value: " << ret;
+    auto result = KeyManagement::addNewPreKeys(10, bob, bobDevId, bobIdpublicKey, provisioning, *store);
+    ASSERT_TRUE(result > 0) << "Actual return value: " << result;
 }

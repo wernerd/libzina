@@ -18,6 +18,7 @@ limitations under the License.
 #include "AppInterfaceImpl.h"
 
 #include "../keymanagment/PreKeys.h"
+#include "../keymanagment/KeyManagement.h"
 #include "../util/b64helper.h"
 #include "../provisioning/Provisioning.h"
 #include "../provisioning/ScProvisioning.h"
@@ -169,22 +170,34 @@ int32_t AppInterfaceImpl::registerZinaDevice(string* result)
 
     json jsonPkrArray = json::array();
 
-    auto* preList = PreKeys::generatePreKeys(store_);
+    // Due to a little asymmetry of the SC provisioning API we need to do some trick here to use
+    // the new key management API:
+    // - get an *empty* Server API implementation, i.e. an implementation that does *not* store
+    //   anything on the server
+    // - call the KeyManagement function to generate a first set of pre-keys and store it in the
+    //   database, using the empty server API -> thus does not affect the server's DB
+    // - get all the stored pre-keys from the database, construct the JSON for the REST API as
+    //   usual.
+    // NOTE: we could also use the KeyManagement::createInitialSet(), however this also creates
+    // a signed pre-key and signed pre-keys are not yet supported within Zina.
 
-    for (; !preList->empty(); preList->pop_front()) {
-        auto& pkPair = preList->front();
+    KeyProvisioningServerApi kps;                       // this is an *empty* implementation
+    KeyManagement::addNewPreKeys(NUM_PRE_KEYS, ownUser_, scClientDevId_, myIdPair.getPublicKey(), kps, *store_);
 
+    std::list<PreKeyDataUnique> keyList;
+    KeyManagement::getAllOneTimeFromDb(keyList, *store_);
+
+    for (auto& preKey : keyList) {
         json pkrObject;
-        pkrObject["id"] = pkPair.keyId;
+        pkrObject["id"] = preKey->keyId;
 
         // Get pre-key's public key data, serialized
-        const string keyData = pkPair.keyPair->getPublicKey().serialize();
+        const string keyData = preKey->keyPair->getPublicKey().serialize();
         b64Encode((const uint8_t*) keyData.data(), keyData.size(), b64Buffer, MAX_KEY_BYTES_ENCODED * 2);
         pkrObject["key"] = b64Buffer;
 
         jsonPkrArray += pkrObject;
     }
-    delete preList;
     jsn["prekeys"] = jsonPkrArray;
 
     int32_t code = Provisioning::registerZinaDevice(jsn.dump(), authorization_, scClientDevId_, result);
@@ -206,14 +219,21 @@ int32_t AppInterfaceImpl::removeZinaDevice(string& devId, string* result)
 int32_t AppInterfaceImpl::newPreKeys(int32_t number)
 {
     LOGGER(DEBUGGING, __func__, " -->");
-    string result;
-    return ScProvisioning::newPreKeys(store_, scClientDevId_, authorization_, number, &result);
+
+    auto conv = ZinaConversation::loadLocalConversation(ownUser_, *store_);
+    const DhPublicKey& identity = conv->getDHIs().getPublicKey();
+
+    ScProvisioning provisioning(authorization_);  // implements the server API, select another class here
+
+    return KeyManagement::addNewPreKeys(number, ownUser_, scClientDevId_, identity, provisioning, *store_);
 }
 
 int32_t AppInterfaceImpl::getNumPreKeys() const
 {
     LOGGER(DEBUGGING, __func__, " <-->");
-    return Provisioning::getNumPreKeys(scClientDevId_, authorization_);
+    ScProvisioning provisioning(authorization_);
+
+    return KeyManagement::getNumberAvailableKeysOnServer(ownUser_, scClientDevId_, provisioning);
 }
 
 // Get known Zina device from provisioning server, check if we have a new one

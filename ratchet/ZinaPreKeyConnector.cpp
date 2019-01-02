@@ -19,6 +19,7 @@ limitations under the License.
 #include "../ratchet/crypto/EcCurve.h"
 
 #include "../keymanagment/PreKeys.h"
+#include "../keymanagment/KeyManagement.h"
 #include "../util/Utilities.h"
 
 // Generic function, located in AxoZrtpConnector.
@@ -139,13 +140,12 @@ int32_t ZinaPreKeyConnector::setupConversationBob(ZinaConversation* conv, int32_
 //    store->dumpPreKeys();
 
     // Get Bob's (my) pre-key that Alice used to create her conversation (ratchet context).
-    string preKeyData;
-    store.loadPreKey(bobPreKeyId, preKeyData);
+    auto preKeyData = KeyManagement::getOneTimeFromDb(bobPreKeyId, store);
 
     // If no such prekey then check if the conversation was already set-up (RK available)
     // if yes -> OK, Alice sent the key more than once because Bob didn't answer her
     // yet. Otherwise Bob got an illegal pre-key.
-    if (preKeyData.empty()) {
+    if (preKeyData->result != SUCCESS) {
         if (conv->getRK().empty()) {
             conv->setErrorCode(NO_PRE_KEY_FOUND);
             LOGGER(ERROR, __func__, " <-- Pre-key not found.");
@@ -161,13 +161,12 @@ int32_t ZinaPreKeyConnector::setupConversationBob(ZinaConversation* conv, int32_
         conv->setIdentityKeyChanged(true);
     }
 
-    // Remove the pre-key from database because Alice used the key
-    store.removePreKey(bobPreKeyId);
+    // Remove the used pre-key because Alice used the key
+    KeyManagement::removeOneTimeFromDb(bobPreKeyId, store);
     conv->reset();
 
     // A0 is Bob's (my) pre-key, this mirrors Alice's usage of her generated A0 pre-key.
-    KeyPairUnique A0 = PreKeys::parsePreKeyData(preKeyData);
-    Utilities::wipeString(preKeyData);
+    KeyPairUnique A0 = move(preKeyData->keyPair);
 
     auto localConv = ZinaConversation::loadLocalConversation(conv->getLocalUser(), store);
     if (!localConv->isValid()) {

@@ -264,6 +264,8 @@ set (key_mngmnt_src
     keymanagment/PreKeys.cpp
     keymanagment/PreKeys.h
     keymanagment/KeyProvisioningServerApi.h
+        keymanagment/KeyManagement.cpp
+        keymanagment/KeyManagement.h
 )
 
 set (provisioning_src

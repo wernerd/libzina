@@ -37,6 +37,10 @@ void ScProvisioning::setHttpHelper(int32_t (*httpHelper)( const std::string&, co
     httpHelper_ = httpHelper;
 }
 
+// **********************************************************************
+//
+// region Server device handling API
+
 // Implementation of the Provisioning API: Register a device, re-used to set 
 // new signed pre-key and to add pre-keys.
 // /v1/me/device/<device_id>/axolotl/keys/?api_key=<API_key>
@@ -72,6 +76,128 @@ int32_t Provisioning::removeZinaDevice(const string& scClientDevId, const string
 
 }
 
+// Implementation of the Provisioning API: Get Available Axolotl registered devices of a user
+// Request URL: /v1/user/wernerd/devices/?filter=axolotl&api_key=<apikey>
+// Method: GET
+/*
+ {
+    "version" :        <int32_t>,        # Version of JSON new pre-keys, 1 for the first implementation
+    {"devices": [{"version": 1, "id": <string>, "device_name": <string>}]}  # array of known Axolotl ScClientDevIds for this user/account
+ }
+ */
+static const char* getUserDevicesRequest = "/v1/user/%s/device/?filter=axolotl&api_key=%s";
+
+int32_t Provisioning::getZinaDeviceIds(const std::string& name, const std::string& authorization, list<pair<string, string> > &deviceIds)
+{
+    LOGGER(DEBUGGING, __func__, " -->");
+
+    if (ScProvisioning::httpHelper_ == nullptr) {
+        LOGGER(ERROR, __func__,  "ZINA library not correctly initialized");
+        return 500;
+    }
+
+    string encoded = Utilities::urlEncode(name);
+
+    char temp[1000];
+    snprintf(temp, 990, getUserDevicesRequest, encoded.c_str(), authorization.c_str());
+
+    std::string requestUri(temp);
+
+    std::string response;
+    int32_t code = ScProvisioning::httpHelper_(requestUri, GET, Empty, &response);
+
+    if (code >= 400) {
+        return NETWORK_ERROR;
+    }
+    if (response.empty()) {
+        return NO_DEVS_FOUND;
+    }
+
+    try {
+        json jsn = json::parse(response);
+
+        json devIds = jsn.at("devices");
+        if (!devIds.is_array()) {
+            LOGGER(ERROR, __func__,  "No devices array in response, ignoring.");
+            return NO_DEVS_FOUND;
+        }
+
+        for (auto& item : devIds) {
+            string id = item.value("id", "");
+            if (id.empty()) {
+                LOGGER(ERROR, __func__,  "Missing device id, ignoring.");
+                continue;
+            }
+            string nameString = item.value("device_name", "");
+            pair<string, string> idName(id, nameString);
+            deviceIds.push_back(idName);
+        }
+    } catch (json::exception& e) {
+        LOGGER(ERROR, __func__,  "Wrong device response JSON data, ignoring: ", response);
+        return NETWORK_ERROR;
+    }
+
+    LOGGER(DEBUGGING, __func__, " <--");
+    return SUCCESS;
+}
+
+// endregion
+
+// **********************************************************************
+//
+// region Server key handling API
+
+// Implementation of the Provisioning API: Set new pre-keys
+// /v1/me/device/<device_id>/axolotl/keys/?api_key=<API_key>
+// Method: PUT
+/*
+ {
+    "prekeys" : [{
+        "id" :        <int32_t>,         # The key id of the signed pre key
+        "key" :       <string>,          # public part encoded base64 data
+    },
+....
+    {
+        "id" :        <int32_t>,         # The key id of the signed pre key
+        "key" :       <string>,          # public part encoded base64 data
+    }]
+ }
+*/
+
+int32_t
+ScProvisioning::newPreKeys_V2(const std::string &longDevId, PreKeysListUnique newOneTimePreKeys, PreKeyDataUnique newSignedPreKey)
+{
+    LOGGER(DEBUGGING, __func__, " -->");
+
+    char temp[1000];
+    snprintf(temp, 990, registerRequest, longDevId.c_str(), authorizationCode.c_str());
+    std::string requestUri(temp);
+
+    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
+
+    json jsn;
+
+    json jsonPkrArray = json::array();
+
+    for (const auto& preKey : *newOneTimePreKeys) {
+        json pkrObject;
+        pkrObject["id"] = preKey->keyId;
+
+        // Get pre-key's public key data, serialized
+        const std::string data = preKey->keyPair->getPublicKey().serialize();
+
+        b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+        pkrObject["key"] = b64Buffer;
+        jsonPkrArray += pkrObject;
+    }
+    jsn["prekeys"] = jsonPkrArray;
+
+    LOGGER(DEBUGGING, __func__, " <--");
+
+    string result;
+    return ScProvisioning::httpHelper_(requestUri, PUT, jsn.dump(), &result);
+}
+
 // Implementation of the Provisioning API: Get Pre-Key
 // Request URL: /v1/user/<user>/device/<devid>/?api_key=<apikey>
 // Method: GET
@@ -89,14 +215,14 @@ int32_t Provisioning::removeZinaDevice(const string& scClientDevId, const string
 */
 static const char* getPreKeyRequest = "/v1/user/%s/device/%s/?api_key=%s";
 
-KeyBundleUnique Provisioning::getPreKeyBundle(const string& name, const string& longDevId, const string& authorization)
+KeyBundleUnique ScProvisioning::getKeyBundle(const std::string& userId, const std::string& deviceId)
 {
     LOGGER(DEBUGGING, __func__, " -->");
 
-    string encoded = Utilities::urlEncode(name);
+    string encoded = Utilities::urlEncode(userId);
 
     char temp[1000];
-    snprintf(temp, 990, getPreKeyRequest, encoded.c_str(), longDevId.c_str(), authorization.c_str());
+    snprintf(temp, 990, getPreKeyRequest, encoded.c_str(), deviceId.c_str(), authorizationCode.c_str());
     std::string requestUri(temp);
 
     std::string response;
@@ -171,12 +297,13 @@ KeyBundleUnique Provisioning::getPreKeyBundle(const string& name, const string& 
  */
 static const char* getNumberPreKeys = "/v1/me/device/%s/?api_key=%s";
 
-int32_t Provisioning::getNumPreKeys(const string& longDevId,  const string& authorization)
+int32_t
+ScProvisioning::getNumberAvailableKeysOnServer(const std::string& userId, const std::string& deviceId)
 {
     LOGGER(DEBUGGING, __func__, " -->");
 
     char temp[1000];
-    snprintf(temp, 990, getNumberPreKeys, longDevId.c_str(), authorization.c_str());
+    snprintf(temp, 990, getNumberPreKeys, deviceId.c_str(), authorizationCode.c_str());
 
     std::string response;
     int32_t code = ScProvisioning::httpHelper_(temp, GET, Empty, &response);
@@ -204,124 +331,11 @@ int32_t Provisioning::getNumPreKeys(const string& longDevId,  const string& auth
     return numIds;
 }
 
+// endregion
 
-// Implementation of the Provisioning API: Get Available Axolotl registered devices of a user
-// Request URL: /v1/user/wernerd/devices/?filter=axolotl&api_key=<apikey>
-// Method: GET
-/*
- {
-    "version" :        <int32_t>,        # Version of JSON new pre-keys, 1 for the first implementation
-    {"devices": [{"version": 1, "id": <string>, "device_name": <string>}]}  # array of known Axolotl ScClientDevIds for this user/account
- }
- */
-static const char* getUserDevicesRequest = "/v1/user/%s/device/?filter=axolotl&api_key=%s";
-
-int32_t Provisioning::getZinaDeviceIds(const std::string& name, const std::string& authorization, list<pair<string, string> > &deviceIds)
-{
-    LOGGER(DEBUGGING, __func__, " -->");
-
-    if (ScProvisioning::httpHelper_ == nullptr) {
-        LOGGER(ERROR, __func__,  "ZINA library not correctly initialized");
-        return 500;
-    }
-
-    string encoded = Utilities::urlEncode(name);
-
-    char temp[1000];
-    snprintf(temp, 990, getUserDevicesRequest, encoded.c_str(), authorization.c_str());
-
-    std::string requestUri(temp);
-
-    std::string response;
-    int32_t code = ScProvisioning::httpHelper_(requestUri, GET, Empty, &response);
-
-    if (code >= 400) {
-        return NETWORK_ERROR;
-    }
-    if (response.empty()) {
-        return NO_DEVS_FOUND;
-    }
-
-    try {
-        json jsn = json::parse(response);
-
-        json devIds = jsn.at("devices");
-        if (!devIds.is_array()) {
-            LOGGER(ERROR, __func__,  "No devices array in response, ignoring.");
-            return NO_DEVS_FOUND;
-        }
-
-        for (auto& item : devIds) {
-            string id = item.value("id", "");
-            if (id.empty()) {
-                LOGGER(ERROR, __func__,  "Missing device id, ignoring.");
-                continue;
-            }
-            string nameString = item.value("device_name", "");
-            pair<string, string> idName(id, nameString);
-            deviceIds.push_back(idName);
-        }
-    } catch (json::exception& e) {
-        LOGGER(ERROR, __func__,  "Wrong device response JSON data, ignoring: ", response);
-        return NETWORK_ERROR;
-    }
-
-    LOGGER(DEBUGGING, __func__, " <--");
-    return SUCCESS;
-}
-
-
-// Implementation of the Provisioning API: Set new pre-keys
-// /v1/me/device/<device_id>/axolotl/keys/?api_key=<API_key>
-// Method: PUT
-/*
- {
-    "prekeys" : [{
-        "id" :        <int32_t>,         # The key id of the signed pre key
-        "key" :       <string>,          # public part encoded base64 data
-    },
-....
-    {
-        "id" :        <int32_t>,         # The key id of the signed pre key
-        "key" :       <string>,          # public part encoded base64 data
-    }]
- }
-*/
-int32_t Provisioning::newPreKeys(SQLiteStoreConv* store, const string& longDevId, const string& authorization, int32_t number, string* result )
-{
-    LOGGER(DEBUGGING, __func__, " -->");
-
-    char temp[1000];
-    snprintf(temp, 990, registerRequest, longDevId.c_str(), authorization.c_str());
-    std::string requestUri(temp);
-
-    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
-
-    json jsn;
-
-    json jsonPkrArray = json::array();
-
-    auto* preList = PreKeys::generatePreKeys(store, number);
-    for (; !preList->empty(); preList->pop_front()) {
-        auto& prePair = preList->front();
-
-        json pkrObject;
-        pkrObject["id"] = prePair.keyId;
-
-        // Get pre-key's public key data, serialized
-        const std::string data = prePair.keyPair->getPublicKey().serialize();
-
-        b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-        pkrObject["key"] = b64Buffer;
-        jsonPkrArray += pkrObject;
-    }
-    delete preList;
-    jsn["prekeys"] = jsonPkrArray;
-
-    LOGGER(DEBUGGING, __func__, " <--");
-
-    return ScProvisioning::httpHelper_(requestUri, PUT, jsn.dump(), result);
-}
+// **********************************************************************
+//
+// region User Info  API
 
 // Implementation of the Provisioning API: Get available user info from provisioning server
 // Request URL: /v1/user/<name>/?api_key=<apikey>
@@ -342,4 +356,6 @@ int32_t Provisioning::getUserInfo(const string& alias,  const string& authorizat
     LOGGER(DEBUGGING, __func__, " <--");
     return code;
 }
+
+// endregion
 
