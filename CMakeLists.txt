@@ -269,6 +269,7 @@ set (key_mngmnt_src
 )
 
 set (provisioning_src
+        provisioning/UserDeviceServerApi.h
     provisioning/ScProvisioning.cpp
 )
 
@@ -371,3 +372,35 @@ configure_file(${CMAKE_SOURCE_DIR}/android/jni/Android.mk
 configure_file(${CMAKE_SOURCE_DIR}/android/jni/Application.mk
                ${CMAKE_BINARY_DIR}/android/jni/Application.mk @ONLY)
 
+
+#if (ANDROID)
+#    message(STATUS "Configure for Android Configuration ${ANDROID_ABI}.")
+#    SET(SYS_TARGET Android-${ANDROID_ABI})
+#
+#    # configure import libs
+#    ### *** Adapt this if necessary ***
+#    set(distribution_DIR ${CMAKE_SOURCE_DIR})
+#    include_directories(${CMAKE_SOURCE_DIR})
+#    set (protobuf_source_dir ${CMAKE_SOURCE_DIR}/protobuf)
+#
+#    add_definitions(-DSQL_CIPHER -DSQLITE_HAS_CODEC ${LOG_MAX_LEVEL} -DGOOGLE_PROTOBUF_NO_RTTI )
+#
+#    add_library(lib_proto STATIC IMPORTED)
+#    set_target_properties(lib_proto PROPERTIES IMPORTED_LOCATION
+#    ${distribution_DIR}/protobuf/build_${ANDROID_ABI}/libprotobuf-cpp-lite.a)
+#
+#    add_library(${zinaLibName} STATIC ${zina_src} ${crypto_src_global} ${attchment_src_global})
+#
+#    # Zina sources require the following external include paths to find the external *.h files
+#    target_include_directories(${zinaLibName} PRIVATE
+#            ${CMAKE_SOURCE_DIR}/android/jni/sqlcipher
+#            ${protobuf_source_dir}/src
+#            ${gloox_DIR}
+#            )
+#
+#    target_link_libraries(${zinaLibName}
+#            lib_proto
+#            log
+#            )
+#
+#endif()

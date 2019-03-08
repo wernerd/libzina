@@ -23,6 +23,7 @@ limitations under the License.
 #include "../Constants.h"
 #include "../ratchet/crypto/EcCurve.h"
 #include "../keymanagment/PreKeys.h"
+#include "../keymanagment/KeyManagement.h"
 #include "../util/Utilities.h"
 
 using namespace zina;
@@ -41,23 +42,75 @@ void ScProvisioning::setHttpHelper(int32_t (*httpHelper)( const std::string&, co
 //
 // region Server device handling API
 
-// Implementation of the Provisioning API: Register a device, re-used to set 
+
+// Implementation of the Provisioning API: Register a device, re-used to set
 // new signed pre-key and to add pre-keys.
 // /v1/me/device/<device_id>/axolotl/keys/?api_key=<API_key>
 // Method: PUT
 
 static const char* registerRequest = "/v1/me/device/%s/axolotl/keys/?api_key=%s";
 
-int32_t Provisioning::registerZinaDevice(const std::string& request, const std::string& authorization, const std::string& scClientDevId, std::string* result)
+int32_t
+ScProvisioning::prepareDevice(const ZinaConversation& conv,
+                              const std::string& deviceId,
+                              const std::string& deviceName,
+                              KeyProvisioningServerApi& kpsApi,
+                              SQLiteStoreConv& store,
+                              std::string& resultFromServer)
 {
+    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
+
     LOGGER(DEBUGGING, __func__, " -->");
+
+    json jsn;
+    jsn["version"] = 1;
+
+    if (!conv.isValid()) {
+        LOGGER(ERROR, __func__, " No own conversation in database.");
+        return NO_OWN_ID;
+    }
+    if (!conv.hasDHIs()) {
+        LOGGER(ERROR, __func__, " Own conversation not correctly initialized.");
+        return NO_OWN_ID;
+    }
+
+    const DhKeyPair& myIdPair = conv.getDHIs();
+    string data = myIdPair.getPublicKey().serialize();
+
+    b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
+    jsn["identity_key"] = b64Buffer;
+
+    json jsonPkrArray = json::array();
+
+    KeyManagement::addNewPreKeys(NUM_PRE_KEYS, conv.getLocalUser(), deviceId, myIdPair.getPublicKey(), kpsApi, store);
+
+    std::list<PreKeyDataUnique> keyList;
+    KeyManagement::getAllOneTimeFromDb(keyList, store);
+
+    for (auto& preKey : keyList) {
+        json pkrObject;
+        pkrObject["id"] = preKey->keyId;
+
+        // Get pre-key's public key data, serialized
+        const string keyData = preKey->keyPair->getPublicKey().serialize();
+        b64Encode((const uint8_t*) keyData.data(), keyData.size(), b64Buffer, MAX_KEY_BYTES_ENCODED * 2);
+        pkrObject["key"] = b64Buffer;
+
+        jsonPkrArray += pkrObject;
+    }
+    jsn["prekeys"] = jsonPkrArray;
+
     char temp[1000];
-    snprintf(temp, 990, registerRequest, scClientDevId.c_str(), authorization.c_str());
+    snprintf(temp, 990, registerRequest, deviceId.c_str(), authorizationCode.c_str());
+    int32_t code = ScProvisioning::httpHelper_(temp, PUT, jsn.dump(), &resultFromServer);
 
-    std::string requestUri(temp);
-    LOGGER(DEBUGGING, __func__, " <--");
-
-    return ScProvisioning::httpHelper_(requestUri, PUT, request, result);
+    if (code != 200) {
+        LOGGER(ERROR, __func__, "Failed to register device for ZINA usage, code: ", code);
+    }
+    else {
+        LOGGER(DEBUGGING, __func__, " <-- ", code);
+    }
+    return code;
 }
 
 // Implementation of the Provisioning API: remove an Axolotl Device 

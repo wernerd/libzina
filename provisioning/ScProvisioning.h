@@ -25,6 +25,7 @@ limitations under the License.
 
 #include <string>
 #include "Provisioning.h"
+#include "UserDeviceServerApi.h"
 
 // The fixed strings used in the SC implementation to form the request URLs
 // /v1/<user>/axolotl/prekey/<scClientDevId>/?api_key=<API_key> - GET
@@ -36,7 +37,7 @@ static const std::string DELETE("DELETE");
 typedef int32_t (*HTTP_FUNC)(const std::string& requestUri, const std::string& method, const std::string& requestData, std::string* response);
 
 namespace zina {
-class ScProvisioning : public Provisioning, public KeyProvisioningServerApi
+class ScProvisioning : public Provisioning, public KeyProvisioningServerApi, public UserDeviceServerApi
 {
 public:
 
@@ -44,6 +45,7 @@ public:
 
     ~ScProvisioning() override = default;
 
+    // region Key server API implementation
     int32_t
     updateKeyBundle(const std::string& userId, const std::string& deviceId, const DhPublicKey& identity,
                     PreKeysListUnique existingOnetimePreKeys,
@@ -59,6 +61,19 @@ public:
 
     int32_t
     getNumberAvailableKeysOnServer(const std::string& userId, const std::string& deviceId) override;
+
+    // endregion
+
+    // region User Device Server API implementation
+    int32_t
+    prepareDevice(const ZinaConversation& conv,
+                  const std::string& deviceId,
+                  const std::string& deviceName,
+                  KeyProvisioningServerApi& kpsApi,
+                  SQLiteStoreConv& store,
+                  std::string& resultFromServer) override;
+
+    // endregion
 
     /**
      * @brief Initialization code must set a HTTP helper function

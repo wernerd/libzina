@@ -144,70 +144,23 @@ string* AppInterfaceImpl::getKnownUsers()
  */
 int32_t AppInterfaceImpl::registerZinaDevice(string* result)
 {
-    char b64Buffer[MAX_KEY_BYTES_ENCODED*2];   // Twice the max. size on binary data - b64 is times 1.5
-
-    LOGGER(DEBUGGING, __func__, " -->");
-
-    json jsn;
-    jsn["version"] = 1;
-//    cJSON_AddStringToObject(root, "scClientDevId", scClientDevId_.c_str());
-
     auto ownConv = ZinaConversation::loadLocalConversation(ownUser_, *store_);
-    if (!ownConv->isValid()) {
-        LOGGER(ERROR, __func__, " No own conversation in database.");
-        return NO_OWN_ID;
-    }
-    if (!ownConv->hasDHIs()) {
-        LOGGER(ERROR, __func__, " Own conversation not correctly initialized.");
-        return NO_OWN_ID;
-    }
 
-    const DhKeyPair& myIdPair = ownConv->getDHIs();
-    string data = myIdPair.getPublicKey().serialize();
-
-    b64Encode((const uint8_t*)data.data(), data.size(), b64Buffer, MAX_KEY_BYTES_ENCODED*2);
-    jsn["identity_key"] = b64Buffer;
-
-    json jsonPkrArray = json::array();
+    ScProvisioning provisioning(authorization_);
 
     // Due to a little asymmetry of the SC provisioning API we need to do some trick here to use
     // the new key management API:
     // - get an *empty* Server API implementation, i.e. an implementation that does *not* store
     //   anything on the server
-    // - call the KeyManagement function to generate a first set of pre-keys and store it in the
-    //   database, using the empty server API -> thus does not affect the server's DB
-    // - get all the stored pre-keys from the database, construct the JSON for the REST API as
+    // - use this to call the KeyManagement function to generate a first set of pre-keys and store
+    //   it in the local database, using the empty server API -> does not send it to the server's DB
+    // - get all the stored pre-keys from the local database, construct the JSON for the REST API as
     //   usual.
     // NOTE: we could also use the KeyManagement::createInitialSet(), however this also creates
     // a signed pre-key and signed pre-keys are not yet supported within Zina.
-
     KeyProvisioningServerApi kps;                       // this is an *empty* implementation
-    KeyManagement::addNewPreKeys(NUM_PRE_KEYS, ownUser_, scClientDevId_, myIdPair.getPublicKey(), kps, *store_);
 
-    std::list<PreKeyDataUnique> keyList;
-    KeyManagement::getAllOneTimeFromDb(keyList, *store_);
-
-    for (auto& preKey : keyList) {
-        json pkrObject;
-        pkrObject["id"] = preKey->keyId;
-
-        // Get pre-key's public key data, serialized
-        const string keyData = preKey->keyPair->getPublicKey().serialize();
-        b64Encode((const uint8_t*) keyData.data(), keyData.size(), b64Buffer, MAX_KEY_BYTES_ENCODED * 2);
-        pkrObject["key"] = b64Buffer;
-
-        jsonPkrArray += pkrObject;
-    }
-    jsn["prekeys"] = jsonPkrArray;
-
-    int32_t code = Provisioning::registerZinaDevice(jsn.dump(), authorization_, scClientDevId_, result);
-    if (code != 200) {
-        LOGGER(ERROR, __func__, "Failed to register device for ZINA usage, code: ", code);
-    }
-    else {
-        LOGGER(DEBUGGING, __func__, " <-- ", code);
-    }
-    return code;
+    return provisioning.prepareDevice(*ownConv, scClientDevId_, Empty, kps, *store_, *result);
 }
 
 int32_t AppInterfaceImpl::removeZinaDevice(string& devId, string* result)
