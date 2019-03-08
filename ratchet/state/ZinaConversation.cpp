@@ -472,11 +472,12 @@ const string* ZinaConversation::serialize() const
         json secondaries = json::array();
 
         for (auto&& secInfo : secondaryRatchets) {
-            json secJson;
-            secJson["prekeyid"] = secInfo->preKeyId;
-            secJson["deviceid"] = secInfo->deviceId;
-            secJson["timestamp"] = secInfo->creationTime;
-            secondaries.emplace_back(secJson);
+            json secJson{
+                    {"prekeyid", secInfo->preKeyId},
+                    { "deviceid", secInfo->deviceId },
+                    { "timestamp", secInfo->creationTime }
+            };
+            secondaries.push_back(secJson);
         }
         jsn["secondaries"] = secondaries;
     }

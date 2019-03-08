@@ -24,12 +24,6 @@
  * @brief Interface definition for key server functions 
  * @ingroup 
  * @{
- * 
- * The ZINA key server should provide some functions to provide key bundle storage and retrieval.
- * 
- * This class provides empty implementations which return a Generic error when called. A key server
- * interface class should inherit this class and provide a implementation. The key management provisioning
- * functions callback to this class to update or retrieve key bundles.
  */
 
 #include <cstdint>
@@ -40,9 +34,16 @@
 
 namespace zina {
 
+    /**
+     * @brief Interface to server's functions to manage key bundles.
+     *
+     * The ZINA key server should provide some functions to provide key bundle storage and retrieval.
+     *
+     * This class provides empty implementations which return a Generic error when called. A key server
+     * interface class should inherit this class and provide a implementation. The key management provisioning
+     * functions callback to this class to update or retrieve key bundles.
+     */
     class KeyProvisioningServerApi {
-    public:
-
     public:
 
         /**

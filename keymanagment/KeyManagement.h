@@ -133,7 +133,7 @@ namespace zina {
         static int32_t
         getNumberAvailableKeysOnServer(const std::string& userId, const std::string& deviceId, KeyProvisioningServerApi& serverApi)
         {
-                return serverApi.getNumberAvailableKeysOnServer(userId, deviceId);
+            return serverApi.getNumberAvailableKeysOnServer(userId, deviceId);
         }
 
         /**
@@ -163,7 +163,7 @@ namespace zina {
         static KeyBundleUnique
         getKeyBundleFromServer(const std::string& userId, const std::string& deviceId, KeyProvisioningServerApi& serverApi)
         {
-                return serverApi.getKeyBundle(userId, deviceId);
+            return serverApi.getKeyBundle(userId, deviceId);
         }
 
     private:
